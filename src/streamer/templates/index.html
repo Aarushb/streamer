@@ -26,19 +26,20 @@
             <button type="submit" id="resume-button" {% if not paused %}disabled{% endif %}>Resume Stream</button>
         </form>
         <p id="pause-status">Playback is <strong id="pause-state">{{ "paused" if paused else "running" }}</strong>.</p>
-        <form method="post" action="/seek" style="display:inline-flex;gap:0.5rem;align-items:center;margin-top:0.5rem">
-            <label for="seek-position">Seek to seconds</label>
-            <input
-                type="number"
-                id="seek-position"
-                name="position"
-                min="0"
-                step="0.1"
-                value="{{ elapsed if elapsed is not none else 0 }}"
-                aria-describedby="track-timing"
-            >
-            <button type="submit">Seek</button>
-        </form>
+        <div style="display:inline-flex;gap:0.5rem;align-items:center;margin-top:0.5rem">
+            <label for="seek-amount">Seek amount</label>
+            <select id="seek-amount" aria-label="Seek amount">
+                <option value="15">15s</option>
+                <option value="30">30s</option>
+                <option value="60">1m</option>
+                <option value="300">5m</option>
+                <option value="600">10m</option>
+                <option value="1800">30m</option>
+                <option value="3600">1h</option>
+            </select>
+            <button type="button" id="seek-back">« Back</button>
+            <button type="button" id="seek-forward">Forward »</button>
+        </div>
     </section>
 
     <section aria-label="Queue" id="queue-section">
@@ -246,6 +247,38 @@
     }).catch(function() {});
 
     setInterval(update, interval);
+
+    // Seek-forward / seek-back handlers using the amount selector
+    function doRelativeSeek(deltaSeconds) {
+        fetch('/api/state').then(function(r) { return r.json(); }).then(function(s) {
+            var elapsed = s.elapsed || 0;
+            var duration = s.duration;
+            var target = elapsed + deltaSeconds;
+            if (target < 0) target = 0;
+            if (duration != null && target > duration) target = duration;
+            fetch('/api/tracks/seek', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({position: target})
+            }).then(function(res) { return res.json(); }).then(function(j) {
+                if (j.ok) update();
+            }).catch(function() {});
+        }).catch(function() {});
+    }
+
+    var seekBack = document.getElementById('seek-back');
+    var seekForward = document.getElementById('seek-forward');
+    var seekAmount = document.getElementById('seek-amount');
+    if (seekBack && seekForward && seekAmount) {
+        seekBack.addEventListener('click', function() {
+            var amt = parseFloat(seekAmount.value) || 15;
+            doRelativeSeek(-amt);
+        });
+        seekForward.addEventListener('click', function() {
+            var amt = parseFloat(seekAmount.value) || 15;
+            doRelativeSeek(amt);
+        });
+    }
 
     var explorerStart = document.getElementById("explorer-start");
     var explorerForce = document.getElementById("explorer-force");
