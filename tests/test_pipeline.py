@@ -1,5 +1,5 @@
 import time
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from streamer.pipeline import AudioPipeline, BYTES_PER_SECOND, RingBuffer, _parse_ogg_pages
 from streamer.scanner import Scanner
@@ -128,6 +128,18 @@ class TestPlaybackInfo:
         assert info["duration"] == 180.0
         assert info["remaining"] == 150.0
 
+    def test_get_playback_info_with_seek_offset(self):
+        state = ServerState()
+        scanner = MagicMock()
+        pipeline = AudioPipeline(state, scanner)
+        pipeline._track_duration = 120.0
+        pipeline._track_offset_bytes = BYTES_PER_SECOND * 12
+        pipeline._track_bytes_written = BYTES_PER_SECOND * 5
+        info = pipeline.get_playback_info()
+        assert info["elapsed"] == 17.0
+        assert info["duration"] == 120.0
+        assert info["remaining"] == 103.0
+
     def test_probe_duration_returns_float(self, test_media_dir):
         state = ServerState()
         scanner = MagicMock()
@@ -149,6 +161,18 @@ class TestPlaybackInfo:
 
 
 class TestAudioPipeline:
+    def test_start_decoder_uses_seek_flag(self):
+        state = ServerState()
+        scanner = MagicMock()
+        pipeline = AudioPipeline(state, scanner)
+
+        with patch("streamer.pipeline.subprocess.Popen") as mock_popen:
+            pipeline._start_decoder("track.mp3", seek_position=12.5)
+
+        cmd = mock_popen.call_args.args[0]
+        assert "-ss" in cmd
+        assert cmd[cmd.index("-ss") + 1] == "12.5"
+
     def test_pipeline_produces_pcm_data(self, test_media_dir):
         state = ServerState()
         scanner = Scanner(roots=[
@@ -158,7 +182,11 @@ class TestAudioPipeline:
         pipeline = AudioPipeline(state, scanner)
         try:
             pipeline.start()
-            time.sleep(2)
+
+            for _ in range(12):
+                if pipeline.ogg_buffer.get_current_position() > 0:
+                    break
+                time.sleep(0.5)
 
             assert state.current_track is not None
             assert pipeline.pcm_buffer.get_current_position() > 0
