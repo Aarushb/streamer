@@ -34,6 +34,10 @@ class ChatBody(BaseModel):
     message: str
 
 
+class SeekBody(BaseModel):
+    position: float
+
+
 # ── Response models ──────────────────────────────────────────────────────
 
 
@@ -52,6 +56,11 @@ class OkResponse(BaseModel):
 class TrackOkResponse(BaseModel):
     ok: bool
     track: str | None = None
+
+
+class SeekResponse(BaseModel):
+    ok: bool
+    position: float | None = None
 
 
 class QueueItem(BaseModel):
@@ -180,12 +189,17 @@ def create_app(state=None, scanner=None, pipeline=None):
         current = _state.current_track
         track_name = Path(current).name if current else "Nothing playing"
         track_path = current or ""
+        info = {"elapsed": None, "duration": None}
+        if _pipeline:
+            info = _pipeline.get_playback_info()
         queue_items = [
             {"name": Path(p).name, "path": p} for p in _state.queue
         ]
         return _templates.TemplateResponse(request, "index.html", {
             "track_name": track_name,
             "track_path": track_path,
+            "elapsed": info["elapsed"],
+            "duration": info["duration"],
             "queue": queue_items,
             "dj_enabled": _state.dj_enabled,
             "curator_enabled": _state.curator_enabled,
@@ -243,6 +257,15 @@ def create_app(state=None, scanner=None, pipeline=None):
         if resolved and resolved.is_file():
             if _pipeline:
                 _pipeline.request_play(str(resolved))
+        return RedirectResponse(url="/", status_code=303)
+
+    @app.post("/seek", include_in_schema=False)
+    def seek_now(
+        position: float = Form(...),
+        _user: str = Depends(verify_credentials),
+    ):
+        if _pipeline:
+            _pipeline.request_seek(position)
         return RedirectResponse(url="/", status_code=303)
 
     @app.get("/browse/play", include_in_schema=False)
@@ -375,6 +398,12 @@ def create_app(state=None, scanner=None, pipeline=None):
                 _pipeline.request_play(str(resolved))
             return {"ok": True}
         return {"ok": False}
+
+    @app.post("/api/tracks/seek", tags=["Tracks"], summary="Seek within the current track", response_model=SeekResponse)
+    def api_tracks_seek(body: SeekBody, _user: str = Depends(verify_credentials)):
+        if _pipeline and _pipeline.request_seek(body.position):
+            return {"ok": True, "position": body.position}
+        return {"ok": False, "position": None}
 
     @app.get("/api/queue", tags=["Queue"], summary="List queued tracks", response_model=QueueListResponse)
     def api_queue_list(_user: str = Depends(verify_credentials)):

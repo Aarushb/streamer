@@ -7,6 +7,7 @@ A local network audio streaming server that continuously broadcasts audio files 
 - Radio-style streaming: all listeners share the same playback position
 - OGG Vorbis and MP3 stream endpoints
 - Web control panel with file browser, queue management, and playback controls
+- Track seeking from the control panel and JSON API
 - Smart shuffle with folder-weighted selection and repeat avoidance
 - AI DJ with Gemini-generated commentary and text-to-speech
 - AI Curator that monitors playback and suggests themed playlists

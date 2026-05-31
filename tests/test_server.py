@@ -65,6 +65,14 @@ class TestControls:
         resp = client.post("/previous", follow_redirects=False)
         assert resp.status_code == 303
 
+    def test_seek_redirects(self, client):
+        resp = client.post(
+            "/seek",
+            data={"position": "12.5"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+
     def test_queue_add(self, client, app, test_media_dir):
         file_path = "entertainment/Test Show/season 01/01.mp3"
         resp = client.post(
@@ -272,6 +280,7 @@ def mock_pipeline():
         "response": "Sure thing.",
         "queued": [],
     }
+    pipeline.request_seek = MagicMock(return_value=True)
     return pipeline
 
 
@@ -286,7 +295,6 @@ def app_with_pipeline(test_media_dir, mock_pipeline):
         test_media_dir / "entertainment" / "Test Show" / "season 01" / "01.mp3"
     )
     return create_app(state=state, scanner=scanner, pipeline=mock_pipeline)
-
 
 @pytest.fixture
 def api_client(app_with_pipeline):
@@ -346,6 +354,24 @@ class TestApiTrackControl:
             "/api/tracks/play",
             json={"path": "nonexistent/file.mp3"},
         )
+        assert resp.json()["ok"] is False
+
+    def test_seek(self, api_client, mock_pipeline):
+        resp = api_client.post(
+            "/api/tracks/seek",
+            json={"position": 42.5},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        assert resp.json()["position"] == 42.5
+        mock_pipeline.request_seek.assert_called_once_with(42.5)
+
+    def test_seek_invalid_when_pipeline_missing(self, client):
+        resp = client.post(
+            "/api/tracks/seek",
+            json={"position": 10.0},
+        )
+        assert resp.status_code == 200
         assert resp.json()["ok"] is False
 
 
@@ -516,6 +542,11 @@ class TestControlPanelUpdates:
     def test_has_timing_element(self, client):
         resp = client.get("/")
         assert 'id="track-timing"' in resp.text
+
+    def test_has_seek_control(self, client):
+        resp = client.get("/")
+        assert 'id="seek-position"' in resp.text
+        assert 'action="/seek"' in resp.text
 
     def test_has_curator_force_button(self, client):
         resp = client.get("/")

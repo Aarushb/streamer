@@ -90,7 +90,7 @@ class AudioPipeline:
         self._running = False
         self._current_decoder = None
         self._ogg_encoder: subprocess.Popen | None = None
-        self._pending_action: tuple[str, str | None] | None = None
+        self._pending_action: tuple[str, str | float | None] | None = None
         self._action_lock = threading.Lock()
         self._dj_cancel = threading.Event()
         self._last_track: str | None = None
@@ -102,6 +102,7 @@ class AudioPipeline:
         self._prefetch_for: str | None = None    # next track the prefetched clip is keyed to
         self._pre_selected_random: str | None = None  # random pick stored for reuse
         self._track_duration: float | None = None
+        self._track_offset_bytes: int = 0
         self._track_bytes_written: int = 0
 
     def start(self):
@@ -162,13 +163,26 @@ class AudioPipeline:
         if self._current_decoder:
             self._current_decoder.kill()
 
-    def _consume_action(self) -> tuple[str, str | None] | None:
+    def request_seek(self, position: float) -> bool:
+        if position < 0:
+            return False
+        if not self.state.current_track:
+            return False
+
+        with self._action_lock:
+            self._pending_action = ("seek", position)
+        self._dj_cancel.set()
+        if self._current_decoder:
+            self._current_decoder.kill()
+        return True
+
+    def _consume_action(self) -> tuple[str, str | float | None] | None:
         with self._action_lock:
             action = self._pending_action
             self._pending_action = None
             return action
 
-    def _get_next_track(self) -> str:
+    def _get_next_track(self) -> tuple[str, float | None, bool]:
         action = self._consume_action()
 
         if action:
@@ -178,11 +192,15 @@ class AudioPipeline:
                 self._pre_selected_random = None
                 track = self.state.go_previous()
                 if track:
-                    return track
+                    return track, None, False
             elif kind == "play":
                 self._pre_selected_random = None
                 self.state.play_now(target)
-                return target
+                return target, None, False
+            elif kind == "seek":
+                current = self.state.current_track
+                if current:
+                    return current, float(target), True
             # "next": fall through and use the pre-selected track so the
             # clip that was generated during the previous track still matches.
 
@@ -190,7 +208,7 @@ class AudioPipeline:
         if track:
             # A queued track was popped — pre-selection is no longer relevant.
             self._pre_selected_random = None
-            return track
+            return track, None, False
 
         # Reuse the random pick that _start_clip_prefetch already made so
         # the generated clip is keyed to the same track we are about to play.
@@ -198,14 +216,14 @@ class AudioPipeline:
             track = self._pre_selected_random
             self._pre_selected_random = None
             self.state.current_track = track
-            return track
+            return track, None, False
 
         picked = self.scanner.pick_random(
             recent=self.state.history,
             last_track=self._last_track,
         )
         self.state.current_track = str(picked)
-        return str(picked)
+        return str(picked), None, False
 
     # ── DJ clip prefetch ──────────────────────────────────────────────────────
 
@@ -287,8 +305,18 @@ class AudioPipeline:
             pass
         return None
 
+    def _probe_duration_async(self, path: str) -> None:
+        duration = self._probe_duration(path)
+        if duration is None:
+            return
+        if self._current_decoder is None:
+            return
+        if self.state.current_track != path:
+            return
+        self._track_duration = duration
+
     def get_playback_info(self) -> dict:
-        elapsed = self._track_bytes_written / BYTES_PER_SECOND
+        elapsed = (self._track_offset_bytes + self._track_bytes_written) / BYTES_PER_SECOND
         duration = self._track_duration
         return {
             "elapsed": round(elapsed, 1),
@@ -300,28 +328,39 @@ class AudioPipeline:
 
     def _run(self):
         while self._running:
-            track = self._get_next_track()
+            track, seek_position, resume_same_track = self._get_next_track()
 
-            # Play the pre-generated DJ clip for this transition if it's ready.
-            # _dj_cancel may be set from killing the previous decoder — clear it
-            # so _play_clip_pcm can be interrupted by the NEXT skip, not this one.
-            if self.state.dj_enabled and self._last_track:
+            if resume_same_track:
+                # Seek within the current track. Do not play transition audio,
+                # but clear the cancel flag so future DJ clips can run again.
                 self._dj_cancel.clear()
-                pcm = self._consume_prefetch(track)
-                if pcm:
-                    self._play_clip_pcm(pcm)
+            else:
+                # Play the pre-generated DJ clip for this transition if it's ready.
+                # _dj_cancel may be set from killing the previous decoder — clear it
+                # so _play_clip_pcm can be interrupted by the NEXT skip, not this one.
+                if self.state.dj_enabled and self._last_track:
+                    self._dj_cancel.clear()
+                    pcm = self._consume_prefetch(track)
+                    if pcm:
+                        self._play_clip_pcm(pcm)
 
-            announcement = self.state.consume_curator_announcement()
-            if announcement:
-                self._play_curator_announcement(announcement)
+                announcement = self.state.consume_curator_announcement()
+                if announcement:
+                    self._play_curator_announcement(announcement)
 
-            decoder = self._start_decoder(track)
+            decoder = self._start_decoder(track, seek_position=seek_position)
             self._current_decoder = decoder
-            self._track_duration = self._probe_duration(track)
+            self._track_offset_bytes = int((seek_position or 0.0) * BYTES_PER_SECOND)
             self._track_bytes_written = 0
+            self._track_duration = None
+            threading.Thread(
+                target=self._probe_duration_async,
+                args=(track,),
+                daemon=True,
+            ).start()
 
             # While this track plays, generate the clip for the next transition.
-            if self.state.dj_enabled:
+            if self.state.dj_enabled and not resume_same_track:
                 self._start_clip_prefetch(track)
 
             track_start = time.monotonic()
@@ -374,13 +413,17 @@ class AudioPipeline:
         except Exception:
             pass
 
-    def _start_decoder(self, path: str) -> subprocess.Popen:
+    def _start_decoder(self, path: str, seek_position: float | None = None) -> subprocess.Popen:
+        cmd = ["ffmpeg", "-v", "error"]
+        if seek_position is not None and seek_position > 0:
+            cmd.extend(["-ss", str(seek_position)])
+        cmd.extend([
+            "-i", path,
+            "-f", "s16le", "-acodec", "pcm_s16le",
+            "-ar", "44100", "-ac", "2", "pipe:1",
+        ])
         return subprocess.Popen(
-            [
-                "ffmpeg", "-v", "error", "-i", path,
-                "-f", "s16le", "-acodec", "pcm_s16le",
-                "-ar", "44100", "-ac", "2", "pipe:1",
-            ],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NO_WINDOW,

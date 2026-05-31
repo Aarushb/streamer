@@ -19,6 +19,19 @@
         <form method="post" action="/next" style="display:inline">
             <button type="submit">Next</button>
         </form>
+        <form method="post" action="/seek" style="display:inline-flex;gap:0.5rem;align-items:center;margin-top:0.5rem">
+            <label for="seek-position">Seek to seconds</label>
+            <input
+                type="number"
+                id="seek-position"
+                name="position"
+                min="0"
+                step="0.1"
+                value="{{ elapsed if elapsed is not none else 0 }}"
+                aria-describedby="track-timing"
+            >
+            <button type="submit">Seek</button>
+        </form>
     </section>
 
     <section aria-label="Queue" id="queue-section">
@@ -116,6 +129,18 @@
 
             var timing = document.getElementById("track-timing");
             timing.textContent = formatTime(s.elapsed) + " / " + formatTime(s.duration);
+
+            var seekPosition = document.getElementById("seek-position");
+            if (seekPosition) {
+                if (s.duration != null) {
+                    seekPosition.max = String(s.duration);
+                } else {
+                    seekPosition.removeAttribute("max");
+                }
+                if (document.activeElement !== seekPosition && s.elapsed != null) {
+                    seekPosition.value = String(s.elapsed);
+                }
+            }
 
             var reason = document.getElementById("curator-reason");
             var reasonText = document.getElementById("curator-reason-text");
