@@ -65,6 +65,14 @@ class TestControls:
         resp = client.post("/previous", follow_redirects=False)
         assert resp.status_code == 303
 
+    def test_pause_redirects(self, client):
+        resp = client.post("/pause", follow_redirects=False)
+        assert resp.status_code == 303
+
+    def test_resume_redirects(self, client):
+        resp = client.post("/resume", follow_redirects=False)
+        assert resp.status_code == 303
+
     def test_seek_redirects(self, client):
         resp = client.post(
             "/seek",
@@ -264,10 +272,13 @@ def mock_pipeline():
         "elapsed": 30.5,
         "duration": 180.0,
         "remaining": 149.5,
+        "paused": False,
     }
     pipeline.request_next = MagicMock()
     pipeline.request_previous = MagicMock(return_value=True)
     pipeline.request_play = MagicMock()
+    pipeline.request_pause = MagicMock(return_value=True)
+    pipeline.request_resume = MagicMock(return_value=True)
     pipeline._curator = MagicMock()
     pipeline._curator.get_status.return_value = {
         "enabled": False,
@@ -371,6 +382,28 @@ class TestApiTrackControl:
             "/api/tracks/seek",
             json={"position": 10.0},
         )
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is False
+
+    def test_pause(self, api_client, mock_pipeline):
+        resp = api_client.post("/api/playback/pause")
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        mock_pipeline.request_pause.assert_called_once()
+
+    def test_resume(self, api_client, mock_pipeline):
+        resp = api_client.post("/api/playback/resume")
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        mock_pipeline.request_resume.assert_called_once()
+
+    def test_pause_invalid_when_pipeline_missing(self, client):
+        resp = client.post("/api/playback/pause")
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is False
+
+    def test_resume_invalid_when_pipeline_missing(self, client):
+        resp = client.post("/api/playback/resume")
         assert resp.status_code == 200
         assert resp.json()["ok"] is False
 
@@ -537,6 +570,18 @@ class TestApiStateEnriched:
         assert data["elapsed"] is None
         assert data["duration"] is None
 
+    def test_state_includes_paused_flag(self, api_client):
+        resp = api_client.get("/api/state")
+        data = resp.json()
+        assert "paused" in data
+        assert data["paused"] is False
+
+    def test_state_reflects_paused_from_state(self, client, app):
+        app.state.server_state.paused = True
+        resp = client.get("/api/state")
+        data = resp.json()
+        assert data["paused"] is True
+
 
 class TestControlPanelUpdates:
     def test_has_timing_element(self, client):
@@ -547,6 +592,12 @@ class TestControlPanelUpdates:
         resp = client.get("/")
         assert 'id="seek-position"' in resp.text
         assert 'action="/seek"' in resp.text
+
+    def test_has_pause_controls(self, client):
+        resp = client.get("/")
+        assert 'action="/pause"' in resp.text
+        assert 'action="/resume"' in resp.text
+        assert 'id="pause-state"' in resp.text
 
     def test_has_curator_force_button(self, client):
         resp = client.get("/")

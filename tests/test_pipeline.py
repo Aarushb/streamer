@@ -213,3 +213,18 @@ class TestAudioPipeline:
             assert any(first_track == h for h in state.history)
         finally:
             pipeline.stop()
+
+    def test_request_pause_and_resume(self):
+        state = ServerState()
+        scanner = MagicMock()
+        pipeline = AudioPipeline(state, scanner)
+
+        assert pipeline.request_pause() is False
+        assert pipeline.request_resume() is False
+
+        state.current_track = "track.mp3"
+        assert pipeline.request_pause() is True
+        assert state.paused is True
+
+        assert pipeline.request_resume() is True
+        assert state.paused is False

@@ -80,6 +80,23 @@ class TestDJToggle:
         assert state.dj_enabled is False
 
 
+class TestPauseToggle:
+    def test_starts_unpaused(self):
+        state = ServerState()
+        assert state.paused is False
+
+    def test_pause_on(self):
+        state = ServerState()
+        state.paused = True
+        assert state.paused is True
+
+    def test_pause_off(self):
+        state = ServerState()
+        state.paused = True
+        state.paused = False
+        assert state.paused is False
+
+
 class TestAdvance:
     def test_advance_pops_queue(self):
         state = ServerState()

@@ -9,6 +9,7 @@ class ServerState:
         self._queue: list[str] = []
         self._history: deque[str] = deque(maxlen=100)
         self._dj_enabled: bool = False
+        self._paused: bool = False
         self._curator_enabled: bool = False
         self._curator_reason: str | None = None
         self._curator_should_announce: bool = False
@@ -57,6 +58,16 @@ class ServerState:
     def dj_enabled(self, value: bool) -> None:
         with self._lock:
             self._dj_enabled = value
+
+    @property
+    def paused(self) -> bool:
+        with self._lock:
+            return self._paused
+
+    @paused.setter
+    def paused(self, value: bool) -> None:
+        with self._lock:
+            self._paused = value
 
     @property
     def curator_enabled(self) -> bool:
