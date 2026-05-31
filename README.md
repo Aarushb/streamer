@@ -8,6 +8,7 @@ A local network audio streaming server that continuously broadcasts audio files 
 - OGG Vorbis and MP3 stream endpoints
 - Web control panel with file browser, queue management, and playback controls
 - Track seeking from the control panel and JSON API
+- Server-side pause/resume controls for the live stream
 - Smart shuffle with folder-weighted selection and repeat avoidance
 - AI DJ with Gemini-generated commentary and text-to-speech
 - AI Curator that monitors playback and suggests themed playlists
@@ -23,6 +24,16 @@ A local network audio streaming server that continuously broadcasts audio files 
 - [uv](https://docs.astral.sh/uv/)
 - [FFmpeg](https://ffmpeg.org/) on PATH
 - [ripgrep](https://github.com/BurntSushi/ripgrep) on PATH (for title-based track search)
+
+If ripgrep is unavailable, curator title search falls back to a built-in Python recursive scan.
+
+On Windows, install ripgrep with one of:
+
+```powershell
+winget install BurntSushi.ripgrep.MSVC
+# or
+choco install ripgrep
+```
 
 ## Setup
 

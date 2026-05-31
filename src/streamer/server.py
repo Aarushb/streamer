@@ -47,6 +47,7 @@ class NowPlayingResponse(BaseModel):
     elapsed: float | None
     duration: float | None
     remaining: float | None
+    paused: bool
 
 
 class OkResponse(BaseModel):
@@ -118,6 +119,7 @@ class StateResponse(BaseModel):
     track_path: str
     queue: list[StateQueueItem]
     dj_enabled: bool
+    paused: bool
     curator_enabled: bool
     curator_reason: str | None
     elapsed: float | None
@@ -200,6 +202,7 @@ def create_app(state=None, scanner=None, pipeline=None):
             "track_path": track_path,
             "elapsed": info["elapsed"],
             "duration": info["duration"],
+            "paused": _state.paused,
             "queue": queue_items,
             "dj_enabled": _state.dj_enabled,
             "curator_enabled": _state.curator_enabled,
@@ -216,6 +219,18 @@ def create_app(state=None, scanner=None, pipeline=None):
     def previous_track(_user: str = Depends(verify_credentials)):
         if _pipeline:
             _pipeline.request_previous()
+        return RedirectResponse(url="/", status_code=303)
+
+    @app.post("/pause", include_in_schema=False)
+    def pause_playback(_user: str = Depends(verify_credentials)):
+        if _pipeline:
+            _pipeline.request_pause()
+        return RedirectResponse(url="/", status_code=303)
+
+    @app.post("/resume", include_in_schema=False)
+    def resume_playback(_user: str = Depends(verify_credentials)):
+        if _pipeline:
+            _pipeline.request_resume()
         return RedirectResponse(url="/", status_code=303)
 
     @app.post("/queue/add", include_in_schema=False)
@@ -355,6 +370,7 @@ def create_app(state=None, scanner=None, pipeline=None):
                 for p in _state.queue
             ],
             "dj_enabled": _state.dj_enabled,
+            "paused": _state.paused,
             "curator_enabled": _state.curator_enabled,
             "curator_reason": _state.curator_reason,
             "elapsed": info["elapsed"],
@@ -404,6 +420,18 @@ def create_app(state=None, scanner=None, pipeline=None):
         if _pipeline and _pipeline.request_seek(body.position):
             return {"ok": True, "position": body.position}
         return {"ok": False, "position": None}
+
+    @app.post("/api/playback/pause", tags=["Tracks"], summary="Pause server-side playback", response_model=OkResponse)
+    def api_playback_pause(_user: str = Depends(verify_credentials)):
+        if _pipeline and _pipeline.request_pause():
+            return {"ok": True}
+        return {"ok": False}
+
+    @app.post("/api/playback/resume", tags=["Tracks"], summary="Resume server-side playback", response_model=OkResponse)
+    def api_playback_resume(_user: str = Depends(verify_credentials)):
+        if _pipeline and _pipeline.request_resume():
+            return {"ok": True}
+        return {"ok": False}
 
     @app.get("/api/queue", tags=["Queue"], summary="List queued tracks", response_model=QueueListResponse)
     def api_queue_list(_user: str = Depends(verify_credentials)):

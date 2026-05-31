@@ -19,6 +19,13 @@
         <form method="post" action="/next" style="display:inline">
             <button type="submit">Next</button>
         </form>
+        <form method="post" action="/pause" style="display:inline">
+            <button type="submit" id="pause-button" {% if paused %}disabled{% endif %}>Pause Stream</button>
+        </form>
+        <form method="post" action="/resume" style="display:inline">
+            <button type="submit" id="resume-button" {% if not paused %}disabled{% endif %}>Resume Stream</button>
+        </form>
+        <p id="pause-status">Playback is <strong id="pause-state">{{ "paused" if paused else "running" }}</strong>.</p>
         <form method="post" action="/seek" style="display:inline-flex;gap:0.5rem;align-items:center;margin-top:0.5rem">
             <label for="seek-position">Seek to seconds</label>
             <input
@@ -169,6 +176,13 @@
 
             document.getElementById("dj-status").textContent = s.dj_enabled ? "on" : "off";
             document.getElementById("dj-toggle").textContent = s.dj_enabled ? "Turn off" : "Turn on";
+            document.getElementById("pause-state").textContent = s.paused ? "paused" : "running";
+            var pauseButton = document.getElementById("pause-button");
+            var resumeButton = document.getElementById("resume-button");
+            if (pauseButton && resumeButton) {
+                pauseButton.disabled = !!s.paused;
+                resumeButton.disabled = !s.paused;
+            }
             document.getElementById("curator-status").textContent = s.curator_enabled ? "on" : "off";
             document.getElementById("curator-toggle").textContent = s.curator_enabled ? "Turn off" : "Turn on";
 

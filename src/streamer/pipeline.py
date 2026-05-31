@@ -176,6 +176,18 @@ class AudioPipeline:
             self._current_decoder.kill()
         return True
 
+    def request_pause(self) -> bool:
+        if not self.state.current_track:
+            return False
+        self.state.paused = True
+        return True
+
+    def request_resume(self) -> bool:
+        if not self.state.current_track:
+            return False
+        self.state.paused = False
+        return True
+
     def _consume_action(self) -> tuple[str, str | float | None] | None:
         with self._action_lock:
             action = self._pending_action
@@ -322,6 +334,7 @@ class AudioPipeline:
             "elapsed": round(elapsed, 1),
             "duration": round(duration, 1) if duration else None,
             "remaining": round(duration - elapsed, 1) if duration else None,
+            "paused": self.state.paused,
         }
 
     # ── Playback ──────────────────────────────────────────────────────────────
@@ -366,6 +379,11 @@ class AudioPipeline:
             track_start = time.monotonic()
 
             while self._running:
+                if self.state.paused:
+                    time.sleep(0.1)
+                    track_start += 0.1
+                    continue
+
                 chunk = decoder.stdout.read(4096)
                 if not chunk:
                     break
