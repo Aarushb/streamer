@@ -590,14 +590,19 @@ class TestControlPanelUpdates:
 
     def test_has_seek_control(self, client):
         resp = client.get("/")
-        assert 'id="seek-position"' in resp.text
-        assert 'action="/seek"' in resp.text
+        # UI now exposes a seek amount selector and back/forward buttons
+        assert 'id="seek-amount"' in resp.text
+        assert 'id="seek-back"' in resp.text
+        assert 'id="seek-forward"' in resp.text
 
     def test_has_pause_controls(self, client):
         resp = client.get("/")
-        assert 'action="/pause"' in resp.text
-        assert 'action="/resume"' in resp.text
+        # single toggle button replaces separate pause/resume forms
+        assert 'id="pause-toggle"' in resp.text
         assert 'id="pause-state"' in resp.text
+        # ensure previous/next controls exist
+        assert 'id="previous-button"' in resp.text
+        assert 'id="next-button"' in resp.text
 
     def test_has_curator_force_button(self, client):
         resp = client.get("/")
