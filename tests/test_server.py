@@ -741,3 +741,29 @@ class TestPlayPageActions:
         assert 'data-api="/api/tracks/play"' in resp.text
         assert 'data-api="/api/queue"' in resp.text
         assert 'id="action-status"' in resp.text
+
+
+class TestBookModeAPI:
+    def test_status_defaults_off(self, api_client):
+        assert api_client.get("/api/book-mode").json() == {"enabled": False}
+
+    def test_enable_and_disable(self, api_client, app_with_pipeline):
+        resp = api_client.post("/api/book-mode", json={"enabled": True})
+        assert resp.json() == {"enabled": True}
+        assert app_with_pipeline.state.server_state.book_mode is True
+        resp = api_client.post("/api/book-mode", json={"enabled": False})
+        assert resp.json() == {"enabled": False}
+
+    def test_state_includes_book_mode(self, api_client, app_with_pipeline):
+        app_with_pipeline.state.server_state.book_mode = True
+        assert api_client.get("/api/state").json()["book_mode"] is True
+
+    def test_html_toggle_redirects(self, client, app):
+        resp = client.post("/book/toggle", follow_redirects=False)
+        assert resp.status_code == 303
+        assert app.state.server_state.book_mode is True
+
+    def test_panel_has_book_mode_section(self, client):
+        resp = client.get("/")
+        assert 'id="book-toggle"' in resp.text
+        assert "Book Reading Mode" in resp.text
