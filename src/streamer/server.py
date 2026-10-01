@@ -142,6 +142,7 @@ class StateResponse(BaseModel):
     dj_enabled: bool
     paused: bool
     book_mode: bool
+    loop_current: bool
     curator_enabled: bool
     curator_reason: str | None
     elapsed: float | None
@@ -245,6 +246,7 @@ def create_app(state=None, scanner=None, pipeline=None):
             "duration": info["duration"],
             "paused": _state.paused,
             "book_mode": _state.book_mode,
+            "loop_current": _state.loop_current,
             "queue": queue_items,
             "dj_enabled": _state.dj_enabled,
             "curator_enabled": _state.curator_enabled,
@@ -305,6 +307,11 @@ def create_app(state=None, scanner=None, pipeline=None):
     @app.post("/dj/toggle", include_in_schema=False)
     def dj_toggle(_user: str = Depends(verify_credentials)):
         _state.dj_enabled = not _state.dj_enabled
+        return RedirectResponse(url="/", status_code=303)
+
+    @app.post("/loop/toggle", include_in_schema=False)
+    def loop_toggle(_user: str = Depends(verify_credentials)):
+        _state.loop_current = not _state.loop_current
         return RedirectResponse(url="/", status_code=303)
 
     @app.post("/book/toggle", include_in_schema=False)
@@ -428,6 +435,7 @@ def create_app(state=None, scanner=None, pipeline=None):
             "dj_enabled": _state.dj_enabled,
             "paused": _state.paused,
             "book_mode": _state.book_mode,
+            "loop_current": _state.loop_current,
             "curator_enabled": _state.curator_enabled,
             "curator_reason": _state.curator_reason,
             "elapsed": info["elapsed"],
@@ -562,6 +570,18 @@ def create_app(state=None, scanner=None, pipeline=None):
     ):
         _state.dj_enabled = body.enabled
         return {"enabled": _state.dj_enabled}
+
+    @app.get("/api/loop", tags=["Tracks"], summary="Get loop-current-track status", response_model=ToggleResponse)
+    def api_loop_status(_user: str = Depends(verify_credentials)):
+        return {"enabled": _state.loop_current}
+
+    @app.post("/api/loop", tags=["Tracks"], summary="Enable or disable looping the current track", response_model=ToggleResponse)
+    def api_loop_set(
+        body: ToggleBody,
+        _user: str = Depends(verify_credentials),
+    ):
+        _state.loop_current = body.enabled
+        return {"enabled": _state.loop_current}
 
     @app.get("/api/book-mode", tags=["Book Mode"], summary="Get book reading mode status", response_model=ToggleResponse)
     def api_book_mode_status(_user: str = Depends(verify_credentials)):
