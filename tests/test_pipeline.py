@@ -241,3 +241,63 @@ class TestAudioPipeline:
 
         assert pipeline._track_duration == 42.0
         assert state.version != version
+
+
+class TestBookMode:
+    def _book(self, tmp_path):
+        book = tmp_path / "Book"
+        book.mkdir()
+        for name in ["chapter 1.mp3", "chapter 2.mp3", "chapter 10.mp3"]:
+            (book / name).write_bytes(b"")
+        return book
+
+    def test_continues_through_folder_in_order(self, tmp_path):
+        book = self._book(tmp_path)
+        state = ServerState()
+        state.book_mode = True
+        state.current_track = str(book / "chapter 2.mp3")
+        pipeline = AudioPipeline(state, Scanner(roots=[tmp_path]))
+
+        track, seek, resume = pipeline._get_next_track()
+
+        assert track == str(book / "chapter 10.mp3")
+        assert (seek, resume) == (None, False)
+        assert state.current_track == track
+
+    def test_queue_takes_priority_over_book_order(self, tmp_path):
+        book = self._book(tmp_path)
+        state = ServerState()
+        state.book_mode = True
+        state.current_track = str(book / "chapter 1.mp3")
+        state.queue_add("queued.mp3")
+        pipeline = AudioPipeline(state, Scanner(roots=[tmp_path]))
+
+        assert pipeline._get_next_track()[0] == "queued.mp3"
+
+    def test_end_of_book_falls_back_to_shuffle(self, tmp_path):
+        book = self._book(tmp_path)
+        other = tmp_path / "Music"
+        other.mkdir()
+        (other / "song.mp3").write_bytes(b"")
+        state = ServerState()
+        state.book_mode = True
+        state.current_track = str(book / "chapter 10.mp3")
+        pipeline = AudioPipeline(state, Scanner(roots=[tmp_path]))
+
+        track, _, _ = pipeline._get_next_track()
+
+        assert state.book_mode is False
+        assert track.endswith(".mp3")
+
+    def test_shuffle_when_book_mode_off(self, tmp_path):
+        book = self._book(tmp_path)
+        state = ServerState()
+        state.current_track = str(book / "chapter 1.mp3")
+        scanner = MagicMock()
+        scanner.pick_random.return_value = book / "chapter 10.mp3"
+        pipeline = AudioPipeline(state, scanner)
+
+        pipeline._get_next_track()
+
+        scanner.pick_random.assert_called_once()
+        scanner.next_in_folder.assert_not_called()

@@ -256,3 +256,13 @@ class TestChangeNotification:
         start = state.version
         state.notify_change()
         assert state.version == start + 1
+
+
+class TestBookMode:
+    def test_starts_off(self):
+        assert ServerState().book_mode is False
+
+    def test_set_and_get(self):
+        state = ServerState()
+        state.book_mode = True
+        assert state.book_mode is True
