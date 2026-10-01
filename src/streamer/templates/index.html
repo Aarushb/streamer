@@ -41,6 +41,10 @@
             <label for="seek-position">Position</label>
             <input type="range" id="seek-position" min="0" max="0" step="1" value="0" disabled>
         </div>
+        <div id="chapter-controls" style="margin-top:0.5rem" hidden>
+            <label for="chapter-select">Chapter</label>
+            <select id="chapter-select"></select>
+        </div>
         <form id="seek-form" method="post" action="/seek" style="margin-top:0.5rem">
             <label for="seek-time">Go to time (m:ss or seconds)</label>
             <input type="text" id="seek-time" name="position" autocomplete="off" inputmode="numeric">
@@ -134,6 +138,7 @@
     var syncedAt = performance.now();
     var scrubbing = false;
     var seekTimer = null;
+    var chapterKey = "";
 
     function formatTime(secs) {
         if (secs == null) return "--:--";
@@ -200,6 +205,20 @@
         }
     }
 
+    function loadChapters() {
+        api("GET", "/api/chapters").then(function(data) {
+            var select = document.getElementById("chapter-select");
+            select.innerHTML = "";
+            for (var i = 0; i < data.chapters.length; i++) {
+                var option = document.createElement("option");
+                option.value = String(data.chapters[i].start);
+                option.textContent = data.chapters[i].title;
+                select.appendChild(option);
+            }
+            document.getElementById("chapter-controls").hidden = data.chapters.length === 0;
+        }).catch(function() {});
+    }
+
     function render(s) {
         current = {paused: s.paused, elapsed: s.elapsed, duration: s.duration};
         syncedAt = performance.now();
@@ -212,6 +231,17 @@
             seekPosition.max = String(Math.floor(s.duration));
         }
         renderTiming();
+
+        var key = s.track_path + "|" + s.chapter_count;
+        if (key !== chapterKey) {
+            chapterKey = key;
+            loadChapters();
+        }
+        var chapterSelect = document.getElementById("chapter-select");
+        if (s.chapter_index != null && document.activeElement !== chapterSelect) {
+            chapterSelect.selectedIndex = s.chapter_index;
+        }
+        chapterSelect.disabled = !!s.paused;
 
         var reason = document.getElementById("curator-reason");
         var reasonText = document.getElementById("curator-reason-text");
@@ -333,6 +363,10 @@
     });
     document.getElementById("seek-forward").addEventListener("click", function() {
         seekRelative(parseFloat(document.getElementById("seek-amount").value) || 15);
+    });
+
+    document.getElementById("chapter-select").addEventListener("change", function() {
+        act("POST", "/api/tracks/seek", {position: Number(this.value)}, "Could not seek.");
     });
 
     var seekSlider = document.getElementById("seek-position");

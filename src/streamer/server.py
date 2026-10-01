@@ -53,6 +53,17 @@ class NowPlayingResponse(BaseModel):
     duration: float | None
     remaining: float | None
     paused: bool
+    chapter: str | None = None
+    chapter_index: int | None = None
+
+
+class Chapter(BaseModel):
+    title: str
+    start: float
+
+
+class ChaptersResponse(BaseModel):
+    chapters: list[Chapter]
 
 
 class OkResponse(BaseModel):
@@ -136,6 +147,9 @@ class StateResponse(BaseModel):
     elapsed: float | None
     duration: float | None
     remaining: float | None
+    chapter: str | None = None
+    chapter_index: int | None = None
+    chapter_count: int = 0
     curator_tracks_since_check: int | None
     curator_next_check_at: int | None
 
@@ -419,6 +433,9 @@ def create_app(state=None, scanner=None, pipeline=None):
             "elapsed": info["elapsed"],
             "duration": info["duration"],
             "remaining": info["remaining"],
+            "chapter": info.get("chapter"),
+            "chapter_index": info.get("chapter_index"),
+            "chapter_count": len(_pipeline.get_chapters()) if _pipeline else 0,
             "curator_tracks_since_check": curator_status.get("tracks_since_check"),
             "curator_next_check_at": curator_status.get("next_check_at"),
         }
@@ -453,6 +470,10 @@ def create_app(state=None, scanner=None, pipeline=None):
             **info,
             "paused": _state.paused,
         }
+
+    @app.get("/api/chapters", tags=["Tracks"], summary="Chapters of the current track (e.g. M4B)", response_model=ChaptersResponse)
+    def api_chapters(_user: str = Depends(verify_credentials)):
+        return {"chapters": _pipeline.get_chapters() if _pipeline else []}
 
     @app.post("/api/tracks/next", tags=["Tracks"], summary="Skip to next track", response_model=OkResponse)
     def api_tracks_next(_user: str = Depends(verify_credentials)):
