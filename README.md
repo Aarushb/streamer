@@ -11,6 +11,8 @@ A local network audio streaming server that continuously broadcasts audio files 
 - Server-side pause/resume controls for the live stream
 - Smart shuffle with folder-weighted selection and repeat avoidance
 - Book reading mode: play a folder in order (no shuffle), with M4B chapter support
+- Loop current track toggle
+- Keyboard shortcuts for the control panel (press `?` for the list)
 - Real-time control panel: state updates stream to the page over SSE, no page reloads
 - AI DJ with Gemini-generated commentary and text-to-speech
 - AI Curator that monitors playback and suggests themed playlists
@@ -112,6 +114,19 @@ Turn on book mode from the control panel (or `POST /api/book-mode`) to stop shuf
 ## Real-time Updates
 
 The control panel listens to `GET /api/events`, a Server-Sent Events stream that pushes the full state whenever something changes (and at least once per second so elapsed time stays accurate). Buttons call the JSON API with `fetch`, so the page never reloads. The classic form routes still work if JavaScript is disabled.
+
+## Keyboard Shortcuts
+
+Active on the control panel except while typing in a text field. Changes are announced to screen readers through an ARIA live region. Press `?` to open the shortcut dialog.
+
+| Key | Action |
+|-----|--------|
+| `K` | Pause / resume |
+| `Shift+N` / `Shift+P` | Next / previous track |
+| `J` / `L` | Seek back / forward by the seek amount |
+| `1`-`7` | Seek amount: 15s, 30s, 1m, 5m, 10m, 30m, 1h |
+| `R` | Toggle loop current track |
+| `?` | Show shortcuts |
 
 ## AI DJ
 
