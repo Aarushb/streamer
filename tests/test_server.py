@@ -707,3 +707,27 @@ class TestExplorerUI:
     def test_explorer_progress_initially_hidden(self, client):
         resp = client.get("/")
         assert 'id="explorer-progress" hidden' in resp.text
+
+
+class TestRealtimeControlPanel:
+    def test_subscribes_to_event_stream(self, client):
+        resp = client.get("/")
+        assert 'new EventSource("/api/events")' in resp.text
+
+    def test_forms_declare_json_api_fallback(self, client):
+        resp = client.get("/")
+        assert 'data-api="/api/tracks/next"' in resp.text
+        assert 'data-api="/api/tracks/previous"' in resp.text
+        assert 'id="pause-form"' in resp.text
+
+    def test_pause_toggle_label_follows_state(self, client, app):
+        assert "Pause Stream" in client.get("/").text
+        app.state.server_state.paused = True
+        assert "Resume Stream" in client.get("/").text
+
+    def test_has_seek_position_controls(self, client):
+        resp = client.get("/")
+        assert 'id="seek-position"' in resp.text
+        assert 'for="seek-position"' in resp.text
+        assert 'id="seek-time"' in resp.text
+        assert 'id="action-status"' in resp.text
