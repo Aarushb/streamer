@@ -274,6 +274,7 @@ def mock_pipeline():
         "remaining": 149.5,
         "paused": False,
     }
+    pipeline.get_chapters = MagicMock(return_value=[])
     pipeline.request_next = MagicMock()
     pipeline.request_previous = MagicMock(return_value=True)
     pipeline.request_play = MagicMock()
@@ -802,3 +803,22 @@ class TestQueueFolder:
         resp = client.get(f"/browse/{self.FOLDER}")
         assert 'id="folder-form"' in resp.text
         assert "Play Folder" in resp.text
+
+
+class TestChaptersAPI:
+    def test_chapters_empty_without_pipeline(self, client):
+        assert client.get("/api/chapters").json() == {"chapters": []}
+
+    def test_chapters_from_pipeline(self, api_client, mock_pipeline):
+        mock_pipeline.get_chapters.return_value = [{"title": "Intro", "start": 0.0}]
+        assert api_client.get("/api/chapters").json() == {
+            "chapters": [{"title": "Intro", "start": 0.0}],
+        }
+
+    def test_state_reports_chapter_fields(self, api_client):
+        data = api_client.get("/api/state").json()
+        assert data["chapter"] is None
+        assert data["chapter_count"] == 0
+
+    def test_panel_has_chapter_select(self, client):
+        assert 'id="chapter-select"' in client.get("/").text
