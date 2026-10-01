@@ -767,3 +767,38 @@ class TestBookModeAPI:
         resp = client.get("/")
         assert 'id="book-toggle"' in resp.text
         assert "Book Reading Mode" in resp.text
+
+
+class TestQueueFolder:
+    FOLDER = "entertainment/Test Show/season 01"
+
+    def test_queues_all_files_in_order(self, api_client, app_with_pipeline, test_media_dir):
+        resp = api_client.post("/api/queue/folder", json={"path": self.FOLDER})
+        assert resp.json() == {"ok": True, "added": 3}
+        queued = [p.rsplit("\\", 1)[-1].rsplit("/", 1)[-1] for p in app_with_pipeline.state.server_state.queue]
+        assert queued == ["01.mp3", "02.mp3", "03.mp3"]
+
+    def test_play_first_plays_first_and_queues_rest(self, api_client, app_with_pipeline, mock_pipeline):
+        resp = api_client.post(
+            "/api/queue/folder", json={"path": self.FOLDER, "play_first": True},
+        )
+        assert resp.json() == {"ok": True, "added": 3}
+        mock_pipeline.request_play.assert_called_once()
+        assert len(app_with_pipeline.state.server_state.queue) == 2
+
+    def test_invalid_folder(self, api_client):
+        resp = api_client.post("/api/queue/folder", json={"path": "nope/missing"})
+        assert resp.json() == {"ok": False, "added": 0}
+
+    def test_html_form_redirects(self, client, app):
+        resp = client.post(
+            "/queue/folder", data={"folder": self.FOLDER, "play_first": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert len(app.state.server_state.queue) == 3
+
+    def test_browse_page_offers_folder_actions(self, client):
+        resp = client.get(f"/browse/{self.FOLDER}")
+        assert 'id="folder-form"' in resp.text
+        assert "Play Folder" in resp.text
