@@ -30,6 +30,11 @@ class ToggleBody(BaseModel):
     enabled: bool
 
 
+class FolderBody(BaseModel):
+    path: str
+    play_first: bool = False
+
+
 class ChatBody(BaseModel):
     message: str
 
@@ -62,6 +67,11 @@ class TrackOkResponse(BaseModel):
 class SeekResponse(BaseModel):
     ok: bool
     position: float | None = None
+
+
+class FolderQueueResponse(BaseModel):
+    ok: bool
+    added: int = 0
 
 
 class QueueItem(BaseModel):
@@ -185,6 +195,22 @@ def create_app(state=None, scanner=None, pipeline=None):
     app.state.pipeline = _pipeline
     app.state.explorer_status = ExplorerStatus()
 
+    def _enqueue_folder(folder: str, play_first: bool) -> int:
+        """Queue a folder's audio files in natural order; optionally play the first now."""
+        resolved = _scanner.resolve_browse_path(folder)
+        if resolved is None or not resolved.is_dir():
+            return 0
+        _, names = _scanner.list_directory(resolved)
+        paths = [str(resolved / name) for name in names]
+        if paths and play_first and _pipeline:
+            _pipeline.request_play(paths.pop(0))
+            added = 1
+        else:
+            added = 0
+        for path in paths:
+            _state.queue_add(path)
+        return added + len(paths)
+
     # ── HTML routes ──────────────────────────────────────────────────────
 
     @app.get("/", include_in_schema=False)
@@ -243,6 +269,15 @@ def create_app(state=None, scanner=None, pipeline=None):
         resolved = _scanner.resolve_browse_path(file)
         if resolved and resolved.is_file():
             _state.queue_add(str(resolved))
+        return RedirectResponse(url="/", status_code=303)
+
+    @app.post("/queue/folder", include_in_schema=False)
+    def queue_folder(
+        folder: str = Form(""),
+        play_first: str = Form(""),
+        _user: str = Depends(verify_credentials),
+    ):
+        _enqueue_folder(folder, play_first == "true")
         return RedirectResponse(url="/", status_code=303)
 
     @app.post("/queue/remove", include_in_schema=False)
@@ -355,6 +390,7 @@ def create_app(state=None, scanner=None, pipeline=None):
         return _templates.TemplateResponse(request, "browse.html", {
             "dirs": dirs,
             "files": files,
+            "folder_path": subpath,
             "breadcrumbs": breadcrumbs,
         })
 
@@ -476,6 +512,14 @@ def create_app(state=None, scanner=None, pipeline=None):
             _state.queue_add(str(resolved))
             return {"ok": True}
         return {"ok": False}
+
+    @app.post("/api/queue/folder", tags=["Queue"], summary="Add every audio file in a folder to the queue, in order", response_model=FolderQueueResponse)
+    def api_queue_folder(
+        body: FolderBody,
+        _user: str = Depends(verify_credentials),
+    ):
+        added = _enqueue_folder(body.path, body.play_first)
+        return {"ok": added > 0, "added": added}
 
     @app.delete("/api/queue/{index}", tags=["Queue"], summary="Remove a track from the queue", response_model=OkResponse)
     def api_queue_remove(
