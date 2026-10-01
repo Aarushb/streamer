@@ -12,6 +12,7 @@ A local network audio streaming server that continuously broadcasts audio files 
 - Smart shuffle with folder-weighted selection and repeat avoidance
 - Book reading mode: play a folder in order (no shuffle), with M4B chapter support
 - Loop current track toggle
+- Low-latency browser listener at `/listen` (raw PCM over HTTP, ~0.3-0.5s delay)
 - Keyboard shortcuts for the control panel (press `?` for the list)
 - Real-time control panel: state updates stream to the page over SSE, no page reloads
 - AI DJ with Gemini-generated commentary and text-to-speech
@@ -114,6 +115,10 @@ Turn on book mode from the control panel (or `POST /api/book-mode`) to stop shuf
 ## Real-time Updates
 
 The control panel listens to `GET /api/events`, a Server-Sent Events stream that pushes the full state whenever something changes (and at least once per second so elapsed time stays accurate). Buttons call the JSON API with `fetch`, so the page never reloads. The classic form routes still work if JavaScript is disabled.
+
+## Low-latency Listener
+
+Players like VLC or a browser `<audio>` tag buffer several seconds of the OGG/MP3 streams, so pause, skip and seek are heard late. Open `http://<your-ip>:8054/listen` and press Start Listening for a browser player with a small, adjustable buffer (150 ms to 1.2 s). It reads raw 16-bit 44.1 kHz stereo PCM from `/stream.pcm` (about 1.4 Mbit/s per listener, intended for a local network). Like the other stream endpoints, both are open without credentials. The OGG and MP3 streams are unchanged.
 
 ## Keyboard Shortcuts
 
