@@ -4,9 +4,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from streamer.pipeline import AudioPipeline
+from streamer.pipeline import AudioPipeline, RingBuffer
 from streamer.scanner import Scanner
-from streamer.server import _state_events, create_app
+from streamer.server import _pcm_chunks, _state_events, create_app
 from streamer.state import ServerState
 
 
@@ -870,3 +870,47 @@ class TestPanelLayoutAndShortcuts:
 
     def test_has_live_announcement_region(self, client):
         assert 'id="announce"' in client.get("/").text
+
+
+class TestPcmStream:
+    def test_yields_data_written_after_connect(self):
+        buf = RingBuffer(size=1024)
+        chunks = _pcm_chunks(buf)
+        buf.write(b"\x01\x02\x03\x04" * 4)
+        assert next(chunks) == b"\x01\x02\x03\x04" * 4
+
+    def test_does_not_replay_old_audio(self):
+        buf = RingBuffer(size=1024)
+        buf.write(b"\x00" * 64)
+        chunks = _pcm_chunks(buf)
+        buf.write(b"\x07\x07\x07\x07")
+        assert next(chunks) == b"\x07\x07\x07\x07"
+
+    def test_starts_on_frame_boundary(self):
+        buf = RingBuffer(size=1024)
+        buf.write(b"\x00" * 6)
+        chunks = _pcm_chunks(buf)
+        buf.write(b"\x01\x02")
+        assert len(next(chunks)) % 4 == 0
+
+    def test_recovers_when_reader_is_lapped(self):
+        buf = RingBuffer(size=64)
+        chunks = _pcm_chunks(buf)
+        buf.write(b"\x09" * 200)
+        data = next(chunks)
+        assert data and len(data) % 4 == 0
+
+    def test_endpoint_without_pipeline_is_empty(self, client):
+        resp = client.get("/stream.pcm")
+        assert resp.status_code == 200
+        assert resp.content == b""
+
+    def test_listen_page(self, client):
+        resp = client.get("/listen")
+        assert resp.status_code == 200
+        assert 'id="listen-toggle"' in resp.text
+        assert 'id="latency"' in resp.text
+        assert "/stream.pcm" in resp.text
+
+    def test_panel_links_to_listener(self, client):
+        assert 'href="/listen"' in client.get("/").text
