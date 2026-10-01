@@ -120,6 +120,7 @@ class StateResponse(BaseModel):
     queue: list[StateQueueItem]
     dj_enabled: bool
     paused: bool
+    book_mode: bool
     curator_enabled: bool
     curator_reason: str | None
     elapsed: float | None
@@ -203,6 +204,7 @@ def create_app(state=None, scanner=None, pipeline=None):
             "elapsed": info["elapsed"],
             "duration": info["duration"],
             "paused": _state.paused,
+            "book_mode": _state.book_mode,
             "queue": queue_items,
             "dj_enabled": _state.dj_enabled,
             "curator_enabled": _state.curator_enabled,
@@ -254,6 +256,11 @@ def create_app(state=None, scanner=None, pipeline=None):
     @app.post("/dj/toggle", include_in_schema=False)
     def dj_toggle(_user: str = Depends(verify_credentials)):
         _state.dj_enabled = not _state.dj_enabled
+        return RedirectResponse(url="/", status_code=303)
+
+    @app.post("/book/toggle", include_in_schema=False)
+    def book_toggle(_user: str = Depends(verify_credentials)):
+        _state.book_mode = not _state.book_mode
         return RedirectResponse(url="/", status_code=303)
 
     @app.post("/curator/toggle", include_in_schema=False)
@@ -370,6 +377,7 @@ def create_app(state=None, scanner=None, pipeline=None):
             ],
             "dj_enabled": _state.dj_enabled,
             "paused": _state.paused,
+            "book_mode": _state.book_mode,
             "curator_enabled": _state.curator_enabled,
             "curator_reason": _state.curator_reason,
             "elapsed": info["elapsed"],
@@ -489,6 +497,18 @@ def create_app(state=None, scanner=None, pipeline=None):
     ):
         _state.dj_enabled = body.enabled
         return {"enabled": _state.dj_enabled}
+
+    @app.get("/api/book-mode", tags=["Book Mode"], summary="Get book reading mode status", response_model=ToggleResponse)
+    def api_book_mode_status(_user: str = Depends(verify_credentials)):
+        return {"enabled": _state.book_mode}
+
+    @app.post("/api/book-mode", tags=["Book Mode"], summary="Enable or disable book reading mode (sequential, no shuffle)", response_model=ToggleResponse)
+    def api_book_mode_set(
+        body: ToggleBody,
+        _user: str = Depends(verify_credentials),
+    ):
+        _state.book_mode = body.enabled
+        return {"enabled": _state.book_mode}
 
     @app.get("/api/curator", tags=["Curator"], summary="Get curator status and check schedule", response_model=CuratorStatusResponse)
     def api_curator_status(_user: str = Depends(verify_credentials)):

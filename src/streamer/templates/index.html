@@ -71,6 +71,14 @@
         </div>
     </section>
 
+    <section aria-label="Book reading mode">
+        <h2>Book Reading Mode</h2>
+        <p>Book mode is currently <strong id="book-status">{{ "on" if book_mode else "off" }}</strong>. When on, playback continues through the folder in order instead of shuffling.</p>
+        <form method="post" action="/book/toggle" id="book-form">
+            <button type="submit" id="book-toggle">Turn {{ "off" if book_mode else "on" }}</button>
+        </form>
+    </section>
+
     <section aria-label="AI DJ">
         <h2>AI DJ</h2>
         <p>DJ is currently <strong id="dj-status">{{ "on" if dj_enabled else "off" }}</strong>.</p>
@@ -232,6 +240,8 @@
 
         document.getElementById("dj-status").textContent = s.dj_enabled ? "on" : "off";
         document.getElementById("dj-toggle").textContent = s.dj_enabled ? "Turn off" : "Turn on";
+        document.getElementById("book-status").textContent = s.book_mode ? "on" : "off";
+        document.getElementById("book-toggle").textContent = s.book_mode ? "Turn off" : "Turn on";
         document.getElementById("pause-state").textContent = s.paused ? "paused" : "running";
         document.getElementById("pause-form").action = s.paused ? "/resume" : "/pause";
         document.getElementById("pause-toggle").textContent = s.paused ? "Resume Stream" : "Pause Stream";
@@ -283,6 +293,10 @@
             e.preventDefault();
             var djOn = document.getElementById("dj-status").textContent === "on";
             act("POST", "/api/dj", {enabled: !djOn});
+        } else if (form.id === "book-form") {
+            e.preventDefault();
+            var bookOn = document.getElementById("book-status").textContent === "on";
+            act("POST", "/api/book-mode", {enabled: !bookOn});
         } else if (form.id === "curator-form") {
             e.preventDefault();
             var curatorOn = document.getElementById("curator-status").textContent === "on";
