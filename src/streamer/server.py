@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from streamer.config import AUTH_PASSWORD_HASH, AUTH_USERNAME
 from streamer.explorer import ExplorerStatus, explore
+from streamer.pipeline import BYTES_PER_FRAME
 from streamer.scanner import Scanner
 from streamer.state import ServerState
 
@@ -762,6 +763,23 @@ def create_app(state=None, scanner=None, pipeline=None):
             headers={"Cache-Control": "no-cache"},
         )
 
+    @app.get("/stream.pcm", include_in_schema=False)
+    def stream_pcm():
+        if not _pipeline:
+            return StreamingResponse(iter(()), media_type="application/octet-stream")
+        return StreamingResponse(
+            _pcm_chunks(_pipeline.pcm_buffer),
+            media_type="application/octet-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Audio-Format": "s16le; rate=44100; channels=2",
+            },
+        )
+
+    @app.get("/listen", include_in_schema=False)
+    def listen(request: Request):
+        return _templates.TemplateResponse(request, "listen.html", {})
+
     @app.get("/stream.mp3", include_in_schema=False)
     def stream_mp3():
         return _stream_response(
@@ -771,6 +789,29 @@ def create_app(state=None, scanner=None, pipeline=None):
         )
 
     return app
+
+
+def _pcm_chunks(buffer, chunk_size: int = 4096):
+    """Yield raw s16le/44.1kHz/stereo PCM from the live position of the buffer."""
+    # Start on a frame boundary so left and right channels are never swapped.
+    pos = buffer.get_current_position()
+    pos -= pos % BYTES_PER_FRAME
+
+    def generate():
+        nonlocal pos
+        while True:
+            data, new_pos = buffer.read(pos, max_bytes=chunk_size)
+            if data is None:
+                # Fell behind the ring buffer; resume at its oldest frame boundary.
+                pos = new_pos + (-new_pos) % BYTES_PER_FRAME
+                continue
+            if not data:
+                time.sleep(0.01)
+                continue
+            pos = new_pos
+            yield data
+
+    return generate()
 
 
 def _state_events(state, build_state, heartbeat: float = 1.0):
