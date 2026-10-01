@@ -1,3 +1,5 @@
+import threading
+
 from streamer.state import ServerState
 
 
@@ -218,3 +220,39 @@ class TestCuratorReason:
         state.curator_reason = "Something"
         state.curator_reason = None
         assert state.curator_reason is None
+
+
+class TestChangeNotification:
+    def test_version_starts_at_zero(self):
+        state = ServerState()
+        assert state.version == 0
+
+    def test_mutations_bump_version(self):
+        state = ServerState()
+        start = state.version
+        state.queue_add("a.mp3")
+        state.paused = True
+        state.dj_enabled = True
+        assert state.version == start + 3
+
+    def test_failed_queue_remove_does_not_bump(self):
+        state = ServerState()
+        start = state.version
+        assert state.queue_remove(3) is False
+        assert state.version == start
+
+    def test_wait_for_change_times_out_unchanged(self):
+        state = ServerState()
+        assert state.wait_for_change(state.version, timeout=0.05) == state.version
+
+    def test_wait_for_change_wakes_on_mutation(self):
+        state = ServerState()
+        seen = state.version
+        threading.Timer(0.05, lambda: setattr(state, "paused", True)).start()
+        assert state.wait_for_change(seen, timeout=2) != seen
+
+    def test_notify_change_bumps_version(self):
+        state = ServerState()
+        start = state.version
+        state.notify_change()
+        assert state.version == start + 1
