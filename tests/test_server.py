@@ -767,7 +767,7 @@ class TestBookModeAPI:
     def test_panel_has_book_mode_section(self, client):
         resp = client.get("/")
         assert 'id="book-toggle"' in resp.text
-        assert "Book Reading Mode" in resp.text
+        assert "Book reading mode" in resp.text
 
 
 class TestQueueFolder:
@@ -841,3 +841,32 @@ class TestLoopAPI:
         resp = client.post("/loop/toggle", follow_redirects=False)
         assert resp.status_code == 303
         assert app.state.server_state.loop_current is True
+
+
+class TestPanelLayoutAndShortcuts:
+    def test_pause_toggle_sits_between_previous_and_next(self, client):
+        text = client.get("/").text
+        assert text.index('id="previous-button"') < text.index('id="pause-toggle"') < text.index('id="next-button"')
+
+    def test_toggles_share_one_options_section(self, client):
+        text = client.get("/").text
+        assert 'aria-label="Options"' in text
+        for label in ("Book reading mode", "AI DJ", "AI Curator", "Loop current track"):
+            assert label in text
+        assert 'aria-label="AI DJ"' not in text
+        assert 'aria-label="Book reading mode"' not in text
+
+    def test_has_loop_toggle(self, client, app):
+        assert 'id="loop-toggle"' in client.get("/").text
+        app.state.server_state.loop_current = True
+        assert "Turn off" in client.get("/").text
+
+    def test_has_shortcuts_dialog(self, client):
+        text = client.get("/").text
+        assert '<dialog id="shortcuts-dialog"' in text
+        assert 'aria-labelledby="shortcuts-title"' in text
+        assert 'id="shortcuts-open"' in text
+        assert "Shift+N" in text
+
+    def test_has_live_announcement_region(self, client):
+        assert 'id="announce"' in client.get("/").text
