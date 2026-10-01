@@ -731,3 +731,13 @@ class TestRealtimeControlPanel:
         assert 'for="seek-position"' in resp.text
         assert 'id="seek-time"' in resp.text
         assert 'id="action-status"' in resp.text
+
+
+class TestPlayPageActions:
+    def test_actions_use_json_api(self, client):
+        resp = client.get(
+            "/browse/play?file=entertainment/Test Show/season 01/01.mp3"
+        )
+        assert 'data-api="/api/tracks/play"' in resp.text
+        assert 'data-api="/api/queue"' in resp.text
+        assert 'id="action-status"' in resp.text
