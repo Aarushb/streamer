@@ -1,3 +1,4 @@
+import json
 import subprocess
 import threading
 import time
@@ -102,6 +103,7 @@ class AudioPipeline:
         self._prefetch_for: str | None = None    # next track the prefetched clip is keyed to
         self._pre_selected_random: str | None = None  # random pick stored for reuse
         self._track_duration: float | None = None
+        self._track_chapters: list[dict] = []
         self._track_offset_bytes: int = 0
         self._track_bytes_written: int = 0
 
@@ -333,6 +335,33 @@ class AudioPipeline:
             pass
         return None
 
+    def _probe_chapters(self, path: str) -> list[dict]:
+        """Return [{"title", "start"}] for files with embedded chapters (e.g. M4B)."""
+        try:
+            proc = subprocess.run(
+                [
+                    "ffprobe", "-v", "error",
+                    "-show_chapters", "-of", "json",
+                    path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if proc.returncode != 0:
+                return []
+            chapters = json.loads(proc.stdout).get("chapters", [])
+            return [
+                {
+                    "title": c.get("tags", {}).get("title") or f"Chapter {i + 1}",
+                    "start": float(c["start_time"]),
+                }
+                for i, c in enumerate(chapters)
+            ]
+        except Exception:
+            return []
+
     def _probe_duration_async(self, path: str) -> None:
         duration = self._probe_duration(path)
         if duration is None:
@@ -343,15 +372,32 @@ class AudioPipeline:
             return
         self._track_duration = duration
         self.state.notify_change()
+        chapters = self._probe_chapters(path)
+        if chapters and self.state.current_track == path:
+            self._track_chapters = chapters
+            self.state.notify_change()
+
+    def get_chapters(self) -> list[dict]:
+        return list(self._track_chapters)
+
+    def _current_chapter(self, elapsed: float) -> tuple[int, str] | None:
+        current = None
+        for i, chapter in enumerate(self._track_chapters):
+            if chapter["start"] <= elapsed:
+                current = (i, chapter["title"])
+        return current
 
     def get_playback_info(self) -> dict:
         elapsed = (self._track_offset_bytes + self._track_bytes_written) / BYTES_PER_SECOND
         duration = self._track_duration
+        chapter = self._current_chapter(elapsed)
         return {
             "elapsed": round(elapsed, 1),
             "duration": round(duration, 1) if duration else None,
             "remaining": round(duration - elapsed, 1) if duration else None,
             "paused": self.state.paused,
+            "chapter": chapter[1] if chapter else None,
+            "chapter_index": chapter[0] if chapter else None,
         }
 
     # ── Playback ──────────────────────────────────────────────────────────────
@@ -383,6 +429,8 @@ class AudioPipeline:
             self._track_offset_bytes = int((seek_position or 0.0) * BYTES_PER_SECOND)
             self._track_bytes_written = 0
             self._track_duration = None
+            if not resume_same_track:
+                self._track_chapters = []
             self.state.notify_change()
             threading.Thread(
                 target=self._probe_duration_async,
