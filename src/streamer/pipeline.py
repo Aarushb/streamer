@@ -216,11 +216,22 @@ class AudioPipeline:
             # "next": fall through and use the pre-selected track so the
             # clip that was generated during the previous track still matches.
 
+        finished = self.state.current_track
         track = self.state.advance()
         if track:
             # A queued track was popped — pre-selection is no longer relevant.
             self._pre_selected_random = None
             return track, None, False
+
+        if self.state.book_mode and finished:
+            # Book mode: continue with the next file in the folder instead of shuffling.
+            following = self.scanner.next_in_folder(finished)
+            if following:
+                self._pre_selected_random = None
+                self.state.current_track = str(following)
+                return str(following), None, False
+            # End of the book: fall back to shuffle.
+            self.state.book_mode = False
 
         # Reuse the random pick that _start_clip_prefetch already made so
         # the generated clip is keyed to the same track we are about to play.
@@ -254,6 +265,11 @@ class AudioPipeline:
         if q:
             # Queue-based: _get_next_track will call state.advance() → same track.
             next_hint = q[0]
+        elif self.state.book_mode:
+            following = self.scanner.next_in_folder(current_track)
+            if following is None:
+                return
+            next_hint = str(following)
         else:
             try:
                 picked = self.scanner.pick_random(

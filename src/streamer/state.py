@@ -12,6 +12,7 @@ class ServerState:
         self._history: deque[str] = deque(maxlen=100)
         self._dj_enabled: bool = False
         self._paused: bool = False
+        self._book_mode: bool = False
         self._curator_enabled: bool = False
         self._curator_reason: str | None = None
         self._curator_should_announce: bool = False
@@ -96,6 +97,17 @@ class ServerState:
     def paused(self, value: bool) -> None:
         with self._lock:
             self._paused = value
+            self._touch()
+
+    @property
+    def book_mode(self) -> bool:
+        with self._lock:
+            return self._book_mode
+
+    @book_mode.setter
+    def book_mode(self, value: bool) -> None:
+        with self._lock:
+            self._book_mode = value
             self._touch()
 
     @property
