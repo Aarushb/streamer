@@ -407,6 +407,7 @@ def create_app(state=None, scanner=None, pipeline=None):
             "track_name": Path(current).name if current else "Nothing playing",
             "track_path": current or "",
             **info,
+            "paused": _state.paused,
         }
 
     @app.post("/api/tracks/next", tags=["Tracks"], summary="Skip to next track", response_model=OkResponse)
