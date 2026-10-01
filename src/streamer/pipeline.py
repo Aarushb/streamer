@@ -199,6 +199,10 @@ class AudioPipeline:
     def _get_next_track(self) -> tuple[str, float | None, bool]:
         action = self._consume_action()
 
+        if action is None and self.state.loop_current and self.state.current_track:
+            # Track ended on its own: replay it. Skip/previous/play still move on.
+            return self.state.current_track, None, True
+
         if action:
             kind, target = action
             if kind == "previous":

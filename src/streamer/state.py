@@ -13,6 +13,7 @@ class ServerState:
         self._dj_enabled: bool = False
         self._paused: bool = False
         self._book_mode: bool = False
+        self._loop_current: bool = False
         self._curator_enabled: bool = False
         self._curator_reason: str | None = None
         self._curator_should_announce: bool = False
@@ -97,6 +98,17 @@ class ServerState:
     def paused(self, value: bool) -> None:
         with self._lock:
             self._paused = value
+            self._touch()
+
+    @property
+    def loop_current(self) -> bool:
+        with self._lock:
+            return self._loop_current
+
+    @loop_current.setter
+    def loop_current(self, value: bool) -> None:
+        with self._lock:
+            self._loop_current = value
             self._touch()
 
     @property
