@@ -228,3 +228,16 @@ class TestAudioPipeline:
 
         assert pipeline.request_resume() is True
         assert state.paused is False
+
+    def test_duration_probe_notifies_state_change(self):
+        state = ServerState()
+        pipeline = AudioPipeline(state, MagicMock())
+        state.current_track = "track.mp3"
+        pipeline._current_decoder = MagicMock()
+        version = state.version
+
+        with patch.object(pipeline, "_probe_duration", return_value=42.0):
+            pipeline._probe_duration_async("track.mp3")
+
+        assert pipeline._track_duration == 42.0
+        assert state.version != version

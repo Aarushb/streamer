@@ -326,6 +326,7 @@ class AudioPipeline:
         if self.state.current_track != path:
             return
         self._track_duration = duration
+        self.state.notify_change()
 
     def get_playback_info(self) -> dict:
         elapsed = (self._track_offset_bytes + self._track_bytes_written) / BYTES_PER_SECOND
@@ -366,6 +367,7 @@ class AudioPipeline:
             self._track_offset_bytes = int((seek_position or 0.0) * BYTES_PER_SECOND)
             self._track_bytes_written = 0
             self._track_duration = None
+            self.state.notify_change()
             threading.Thread(
                 target=self._probe_duration_async,
                 args=(track,),
