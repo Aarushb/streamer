@@ -1,3 +1,4 @@
+import subprocess
 import time
 from unittest.mock import MagicMock, patch
 
@@ -301,3 +302,62 @@ class TestBookMode:
 
         scanner.pick_random.assert_called_once()
         scanner.next_in_folder.assert_not_called()
+
+
+class TestChapters:
+    CHAPTERS = [
+        {"title": "Intro", "start": 0.0},
+        {"title": "Part One", "start": 60.0},
+        {"title": "Part Two", "start": 120.0},
+    ]
+
+    def test_probe_chapters_parses_ffprobe_json(self):
+        pipeline = AudioPipeline(ServerState(), MagicMock())
+        output = (
+            '{"chapters": [{"start_time": "0.000000", "tags": {"title": "Intro"}},'
+            ' {"start_time": "61.5"}]}'
+        )
+        with patch("streamer.pipeline.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=output)
+            chapters = pipeline._probe_chapters("book.m4b")
+        assert chapters == [
+            {"title": "Intro", "start": 0.0},
+            {"title": "Chapter 2", "start": 61.5},
+        ]
+
+    def test_probe_chapters_empty_on_failure(self):
+        pipeline = AudioPipeline(ServerState(), MagicMock())
+        with patch("streamer.pipeline.subprocess.run", side_effect=OSError):
+            assert pipeline._probe_chapters("book.m4b") == []
+
+    def test_playback_info_reports_current_chapter(self):
+        pipeline = AudioPipeline(ServerState(), MagicMock())
+        pipeline._track_chapters = self.CHAPTERS
+        pipeline._track_bytes_written = int(75 * BYTES_PER_SECOND)
+        info = pipeline.get_playback_info()
+        assert info["chapter"] == "Part One"
+        assert info["chapter_index"] == 1
+
+    def test_playback_info_without_chapters(self):
+        info = AudioPipeline(ServerState(), MagicMock()).get_playback_info()
+        assert info["chapter"] is None
+        assert info["chapter_index"] is None
+
+    def test_probe_picks_up_real_chapters(self, tmp_path):
+        meta = tmp_path / "meta.txt"
+        meta.write_text(
+            ";FFMETADATA1\n"
+            "[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1000\ntitle=One\n"
+            "[CHAPTER]\nTIMEBASE=1/1000\nSTART=1000\nEND=2000\ntitle=Two\n"
+        )
+        book = tmp_path / "book.m4b"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-f", "lavfi", "-i", "sine=duration=2",
+                "-i", str(meta), "-map_metadata", "1", "-map_chapters", "1",
+                "-c:a", "aac", str(book),
+            ],
+            capture_output=True, check=True,
+        )
+        chapters = AudioPipeline(ServerState(), MagicMock())._probe_chapters(str(book))
+        assert [c["title"] for c in chapters] == ["One", "Two"]
