@@ -10,6 +10,8 @@ A local network audio streaming server that continuously broadcasts audio files 
 - Track seeking from the control panel and JSON API
 - Server-side pause/resume controls for the live stream
 - Smart shuffle with folder-weighted selection and repeat avoidance
+- Book reading mode: play a folder in order (no shuffle), with M4B chapter support
+- Real-time control panel: state updates stream to the page over SSE, no page reloads
 - AI DJ with Gemini-generated commentary and text-to-speech
 - AI Curator that monitors playback and suggests themed playlists
 - Curator chat: talk to the curator to request specific content by title or theme
@@ -99,6 +101,17 @@ The control panel can be password-protected with HTTP Basic Auth. Stream endpoin
    ```
 
 3. Restart the server.
+
+## Book Reading Mode
+
+Turn on book mode from the control panel (or `POST /api/book-mode`) to stop shuffling. Playback continues with the next file in the same folder, in natural filename order (`chapter 2` before `chapter 10`). Queued tracks still play first. When the last file in the folder finishes, book mode turns itself off and shuffle resumes.
+
+- `.m4b` audiobooks are supported. Embedded chapters are shown in the control panel, which has a chapter selector to jump between them (`GET /api/chapters`).
+- In the file browser, "Play Folder" plays the first file now and queues the rest; "Add All to Queue" queues the whole folder (`POST /api/queue/folder`).
+
+## Real-time Updates
+
+The control panel listens to `GET /api/events`, a Server-Sent Events stream that pushes the full state whenever something changes (and at least once per second so elapsed time stays accurate). Buttons call the JSON API with `fetch`, so the page never reloads. The classic form routes still work if JavaScript is disabled.
 
 ## AI DJ
 
