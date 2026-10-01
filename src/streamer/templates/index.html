@@ -4,9 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Streamer</title>
+    <style>
+        .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    </style>
 </head>
 <body>
 <main>
+    <div id="announce" class="visually-hidden" role="status" aria-live="polite"></div>
     <h1>Now Playing</h1>
     <p aria-live="polite" id="now-playing"><strong id="track-name">{{ track_name }}</strong> &mdash; <span id="track-path">{{ track_path }}</span></p>
     <p aria-live="off" id="track-timing"></p>
@@ -16,12 +20,13 @@
         <form method="post" action="/previous" data-api="/api/tracks/previous" style="display:inline">
             <button type="submit" id="previous-button">Previous</button>
         </form>
-        <form method="post" action="/next" data-api="/api/tracks/next" style="display:inline">
-            <button type="submit" id="next-button">Next</button>
-        </form>
         <form method="post" action="{{ '/resume' if paused else '/pause' }}" id="pause-form" style="display:inline">
             <button type="submit" id="pause-toggle">{% if paused %}Resume Stream{% else %}Pause Stream{% endif %}</button>
         </form>
+        <form method="post" action="/next" data-api="/api/tracks/next" style="display:inline">
+            <button type="submit" id="next-button">Next</button>
+        </form>
+        <button type="button" id="shortcuts-open" aria-haspopup="dialog">Keyboard shortcuts (?)</button>
         <p id="pause-status">Playback is <strong id="pause-state">{{ "paused" if paused else "running" }}</strong>.</p>
         <div style="display:inline-flex;gap:0.5rem;align-items:center;margin-top:0.5rem">
             <label for="seek-amount">Seek amount</label>
@@ -75,26 +80,22 @@
         </div>
     </section>
 
-    <section aria-label="Book reading mode">
-        <h2>Book Reading Mode</h2>
-        <p>Book mode is currently <strong id="book-status">{{ "on" if book_mode else "off" }}</strong>. When on, playback continues through the folder in order instead of shuffling.</p>
+    <section aria-label="Options">
+        <h2>Options</h2>
+        <form method="post" action="/loop/toggle" id="loop-form">
+            Loop current track is <strong id="loop-status">{{ "on" if loop_current else "off" }}</strong>.
+            <button type="submit" id="loop-toggle">Turn {{ "off" if loop_current else "on" }}</button>
+        </form>
         <form method="post" action="/book/toggle" id="book-form">
+            Book reading mode (play the folder in order, no shuffle) is <strong id="book-status">{{ "on" if book_mode else "off" }}</strong>.
             <button type="submit" id="book-toggle">Turn {{ "off" if book_mode else "on" }}</button>
         </form>
-    </section>
-
-    <section aria-label="AI DJ">
-        <h2>AI DJ</h2>
-        <p>DJ is currently <strong id="dj-status">{{ "on" if dj_enabled else "off" }}</strong>.</p>
         <form method="post" action="/dj/toggle" id="dj-form">
+            AI DJ is <strong id="dj-status">{{ "on" if dj_enabled else "off" }}</strong>.
             <button type="submit" id="dj-toggle">Turn {{ "off" if dj_enabled else "on" }}</button>
         </form>
-    </section>
-
-    <section aria-label="AI Curator">
-        <h2>AI Curator</h2>
-        <p>Curator is currently <strong id="curator-status">{{ "on" if curator_enabled else "off" }}</strong>.</p>
         <form method="post" action="/curator/toggle" id="curator-form">
+            AI Curator is <strong id="curator-status">{{ "on" if curator_enabled else "off" }}</strong>.
             <button type="submit" id="curator-toggle">Turn {{ "off" if curator_enabled else "on" }}</button>
         </form>
         <p id="curator-check-info" hidden>Tracks until next check: <strong id="curator-tracks-remaining">-</strong></p>
@@ -132,6 +133,24 @@
         </ul>
     </nav>
 </main>
+<dialog id="shortcuts-dialog" aria-labelledby="shortcuts-title">
+    <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+    <p>Shortcuts are ignored while typing in a text field.</p>
+    <ul>
+        <li><kbd>K</kbd> &mdash; pause or resume</li>
+        <li><kbd>Shift+N</kbd> &mdash; next track</li>
+        <li><kbd>Shift+P</kbd> &mdash; previous track</li>
+        <li><kbd>J</kbd> &mdash; seek back by the seek amount</li>
+        <li><kbd>L</kbd> &mdash; seek forward by the seek amount</li>
+        <li><kbd>1</kbd>&ndash;<kbd>7</kbd> &mdash; seek amount: 15s, 30s, 1m, 5m, 10m, 30m, 1h</li>
+        <li><kbd>R</kbd> &mdash; toggle loop current track</li>
+        <li><kbd>?</kbd> &mdash; open this dialog</li>
+        <li><kbd>Esc</kbd> &mdash; close this dialog</li>
+    </ul>
+    <form method="dialog">
+        <button type="submit">Close</button>
+    </form>
+</dialog>
 <script>
 (function() {
     var current = {paused: {{ "true" if paused else "false" }}, elapsed: null, duration: null};
@@ -161,6 +180,15 @@
         var d = document.createElement("div");
         d.textContent = t;
         return d.innerHTML;
+    }
+
+    var announceTimer = null;
+    function announce(text) {
+        var region = document.getElementById("announce");
+        region.textContent = "";
+        clearTimeout(announceTimer);
+        // Set after a tick so repeating the same message is announced again.
+        announceTimer = setTimeout(function() { region.textContent = text; }, 50);
     }
 
     function setStatus(text) {
@@ -270,6 +298,8 @@
 
         document.getElementById("dj-status").textContent = s.dj_enabled ? "on" : "off";
         document.getElementById("dj-toggle").textContent = s.dj_enabled ? "Turn off" : "Turn on";
+        document.getElementById("loop-status").textContent = s.loop_current ? "on" : "off";
+        document.getElementById("loop-toggle").textContent = s.loop_current ? "Turn off" : "Turn on";
         document.getElementById("book-status").textContent = s.book_mode ? "on" : "off";
         document.getElementById("book-toggle").textContent = s.book_mode ? "Turn off" : "Turn on";
         document.getElementById("pause-state").textContent = s.paused ? "paused" : "running";
@@ -318,7 +348,10 @@
             act("POST", apiUrl, undefined, "Nothing to do.");
         } else if (form.id === "pause-form") {
             e.preventDefault();
-            act("POST", current.paused ? "/api/playback/resume" : "/api/playback/pause", undefined, "Nothing is playing.");
+            togglePause();
+        } else if (form.id === "loop-form") {
+            e.preventDefault();
+            toggleLoop();
         } else if (form.id === "dj-form") {
             e.preventDefault();
             var djOn = document.getElementById("dj-status").textContent === "on";
@@ -351,18 +384,86 @@
         act("POST", "/api/curator/force");
     });
 
+    function seekAmount() {
+        return parseFloat(document.getElementById("seek-amount").value) || 15;
+    }
+
+    function describeSeconds(secs) {
+        if (secs >= 3600) return (secs / 3600) + (secs === 3600 ? " hour" : " hours");
+        if (secs >= 60) return (secs / 60) + (secs === 60 ? " minute" : " minutes");
+        return secs + " seconds";
+    }
+
     function seekRelative(deltaSeconds) {
         var elapsed = currentElapsed() || 0;
         var target = Math.max(0, elapsed + deltaSeconds);
         if (current.duration != null) target = Math.min(target, current.duration);
-        act("POST", "/api/tracks/seek", {position: target}, "Could not seek.");
+        return act("POST", "/api/tracks/seek", {position: target}, "Could not seek.");
+    }
+
+    function togglePause() {
+        var resuming = current.paused;
+        return act("POST", resuming ? "/api/playback/resume" : "/api/playback/pause", undefined, "Nothing is playing.").then(function(j) {
+            if (j && j.ok !== false) announce(resuming ? "Playing" : "Paused");
+        });
+    }
+
+    function toggleLoop() {
+        var on = document.getElementById("loop-status").textContent !== "on";
+        return act("POST", "/api/loop", {enabled: on}).then(function(j) {
+            if (j) announce("Loop current track " + (on ? "on" : "off"));
+        });
     }
 
     document.getElementById("seek-back").addEventListener("click", function() {
-        seekRelative(-(parseFloat(document.getElementById("seek-amount").value) || 15));
+        seekRelative(-seekAmount());
     });
     document.getElementById("seek-forward").addEventListener("click", function() {
-        seekRelative(parseFloat(document.getElementById("seek-amount").value) || 15);
+        seekRelative(seekAmount());
+    });
+
+    var shortcutsDialog = document.getElementById("shortcuts-dialog");
+    document.getElementById("shortcuts-open").addEventListener("click", function() {
+        shortcutsDialog.showModal();
+    });
+
+    document.addEventListener("keydown", function(e) {
+        if (e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
+        var tag = e.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable) return;
+        if (shortcutsDialog.open) return;
+
+        var key = e.key;
+        var needsPlaying = {"N": 1, "P": 1, "j": 1, "l": 1};
+
+        if (key === "k") {
+            togglePause();
+        } else if (key === "r") {
+            toggleLoop();
+        } else if (key === "?") {
+            shortcutsDialog.showModal();
+        } else if (key >= "1" && key <= "7") {
+            document.getElementById("seek-amount").selectedIndex = Number(key) - 1;
+            announce("Seek amount " + describeSeconds(seekAmount()));
+        } else if (needsPlaying[key]) {
+            if (current.paused) {
+                announce("Paused. Press K to resume.");
+            } else if (key === "N") {
+                act("POST", "/api/tracks/next").then(function(j) { if (j) announce("Next track"); });
+            } else if (key === "P") {
+                act("POST", "/api/tracks/previous", undefined, "No previous track.").then(function(j) {
+                    if (j && j.ok !== false) announce("Previous track");
+                });
+            } else {
+                var delta = key === "j" ? -seekAmount() : seekAmount();
+                seekRelative(delta).then(function(j) {
+                    if (j && j.ok !== false) announce((delta < 0 ? "Back " : "Forward ") + describeSeconds(seekAmount()));
+                });
+            }
+        } else {
+            return;
+        }
+        e.preventDefault();
     });
 
     document.getElementById("chapter-select").addEventListener("change", function() {
