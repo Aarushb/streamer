@@ -353,8 +353,7 @@ def create_app(state=None, scanner=None, pipeline=None):
 
     # ── Legacy API ───────────────────────────────────────────────────────
 
-    @app.get("/api/state", tags=["State"], summary="Full server state", response_model=StateResponse)
-    def api_state(_user: str = Depends(verify_credentials)):
+    def _build_state() -> dict:
         current = _state.current_track
         info = {"elapsed": None, "duration": None, "remaining": None}
         if _pipeline:
@@ -379,6 +378,18 @@ def create_app(state=None, scanner=None, pipeline=None):
             "curator_tracks_since_check": curator_status.get("tracks_since_check"),
             "curator_next_check_at": curator_status.get("next_check_at"),
         }
+
+    @app.get("/api/state", tags=["State"], summary="Full server state", response_model=StateResponse)
+    def api_state(_user: str = Depends(verify_credentials)):
+        return _build_state()
+
+    @app.get("/api/events", tags=["State"], summary="Stream state changes via SSE")
+    def api_events(_user: str = Depends(verify_credentials)):
+        return StreamingResponse(
+            _state_events(_state, _build_state),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     @app.get("/api/history", tags=["State"], summary="Recent play history")
     def api_history(_user: str = Depends(verify_credentials)):
@@ -654,6 +665,14 @@ def create_app(state=None, scanner=None, pipeline=None):
         )
 
     return app
+
+
+def _state_events(state, build_state, heartbeat: float = 1.0):
+    """Yield an SSE message with the full state on every change, and at least once per heartbeat."""
+    while True:
+        version = state.version
+        yield f"data: {json_mod.dumps(build_state())}\n\n"
+        state.wait_for_change(version, timeout=heartbeat)
 
 
 def _stream_response(pipeline, codec_args, mimetype):

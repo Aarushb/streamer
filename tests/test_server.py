@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from streamer.pipeline import AudioPipeline
 from streamer.scanner import Scanner
-from streamer.server import create_app
+from streamer.server import _state_events, create_app
 from streamer.state import ServerState
 
 
@@ -666,6 +666,29 @@ class TestExplorerAPI:
         with api_client.stream("GET", "/api/explorer/progress") as resp:
             assert resp.status_code == 200
             assert "text/event-stream" in resp.headers["content-type"]
+
+
+class TestStateEvents:
+    def test_first_event_is_full_state(self):
+        state = ServerState()
+        events = _state_events(state, lambda: {"paused": state.paused})
+        assert next(events) == 'data: {"paused": false}\n\n'
+
+    def test_emits_again_after_change(self):
+        state = ServerState()
+        events = _state_events(state, lambda: {"paused": state.paused})
+        next(events)
+        state.paused = True
+        assert next(events) == 'data: {"paused": true}\n\n'
+
+    def test_heartbeat_repeats_without_change(self):
+        state = ServerState()
+        events = _state_events(state, lambda: {"n": 1}, heartbeat=0.05)
+        assert next(events) == next(events)
+
+    def test_events_endpoint_is_documented(self, api_client):
+        paths = api_client.get("/openapi.json").json()["paths"]
+        assert "get" in paths["/api/events"]
 
 
 class TestExplorerUI:
