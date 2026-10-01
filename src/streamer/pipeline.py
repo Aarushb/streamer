@@ -7,6 +7,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from streamer.curator import Curator
 
 BYTES_PER_SECOND = 44100 * 2 * 2
+BYTES_PER_FRAME = 2 * 2
 
 
 def _parse_ogg_pages(data: bytes) -> list[tuple[int, int]]:
@@ -457,6 +458,10 @@ class AudioPipeline:
                 chunk = decoder.stdout.read(4096)
                 if not chunk:
                     break
+                # Keep PCM frame-aligned so raw-PCM listeners never swap channels.
+                chunk = chunk[:len(chunk) - len(chunk) % BYTES_PER_FRAME]
+                if not chunk:
+                    continue
                 self.pcm_buffer.write(chunk)
                 self._write_to_ogg_encoder(chunk)
                 self._track_bytes_written += len(chunk)
