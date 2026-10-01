@@ -822,3 +822,22 @@ class TestChaptersAPI:
 
     def test_panel_has_chapter_select(self, client):
         assert 'id="chapter-select"' in client.get("/").text
+
+
+class TestLoopAPI:
+    def test_status_defaults_off(self, api_client):
+        assert api_client.get("/api/loop").json() == {"enabled": False}
+
+    def test_enable_and_disable(self, api_client, app_with_pipeline):
+        assert api_client.post("/api/loop", json={"enabled": True}).json() == {"enabled": True}
+        assert app_with_pipeline.state.server_state.loop_current is True
+        assert api_client.post("/api/loop", json={"enabled": False}).json() == {"enabled": False}
+
+    def test_state_includes_loop(self, api_client, app_with_pipeline):
+        app_with_pipeline.state.server_state.loop_current = True
+        assert api_client.get("/api/state").json()["loop_current"] is True
+
+    def test_html_toggle_redirects(self, client, app):
+        resp = client.post("/loop/toggle", follow_redirects=False)
+        assert resp.status_code == 303
+        assert app.state.server_state.loop_current is True

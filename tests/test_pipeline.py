@@ -361,3 +361,25 @@ class TestChapters:
         )
         chapters = AudioPipeline(ServerState(), MagicMock())._probe_chapters(str(book))
         assert [c["title"] for c in chapters] == ["One", "Two"]
+
+
+class TestLoopCurrent:
+    def test_replays_track_when_it_ends(self):
+        state = ServerState()
+        state.current_track = "a.mp3"
+        state.queue_add("b.mp3")
+        state.loop_current = True
+        pipeline = AudioPipeline(state, MagicMock())
+
+        assert pipeline._get_next_track() == ("a.mp3", None, True)
+        assert state.queue == ["b.mp3"]
+
+    def test_next_still_advances_while_looping(self):
+        state = ServerState()
+        state.current_track = "a.mp3"
+        state.queue_add("b.mp3")
+        state.loop_current = True
+        pipeline = AudioPipeline(state, MagicMock())
+        pipeline._pending_action = ("next", None)
+
+        assert pipeline._get_next_track()[0] == "b.mp3"

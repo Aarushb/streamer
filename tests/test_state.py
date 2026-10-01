@@ -266,3 +266,13 @@ class TestBookMode:
         state = ServerState()
         state.book_mode = True
         assert state.book_mode is True
+
+
+class TestLoopCurrent:
+    def test_starts_off(self):
+        assert ServerState().loop_current is False
+
+    def test_set_and_get(self):
+        state = ServerState()
+        state.loop_current = True
+        assert state.loop_current is True
