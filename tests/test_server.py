@@ -717,9 +717,9 @@ class TestRealtimeControlPanel:
 
     def test_forms_declare_json_api_fallback(self, client):
         resp = client.get("/")
-        assert 'data-api="/api/tracks/next"' in resp.text
-        assert 'data-api="/api/tracks/previous"' in resp.text
-        assert 'id="pause-form"' in resp.text
+        assert 'formaction="/next"' in resp.text
+        assert 'formaction="/previous"' in resp.text
+        assert 'id="transport-form"' in resp.text
 
     def test_pause_toggle_label_follows_state(self, client, app):
         assert "Pause Stream" in client.get("/").text
@@ -914,3 +914,26 @@ class TestPcmStream:
 
     def test_panel_links_to_listener(self, client):
         assert 'href="/listen"' in client.get("/").text
+
+
+class TestSingleFormGroups:
+    def test_transport_buttons_share_one_form(self, client):
+        text = client.get("/").text
+        start = text.index('id="transport-form"')
+        end = text.index("</form>", start)
+        group = text[start:end]
+        for button in ("previous-button", "pause-toggle", "next-button"):
+            assert f'id="{button}"' in group
+
+    def test_option_toggles_share_one_form(self, client):
+        text = client.get("/").text
+        start = text.index('id="options-form"')
+        end = text.index("</form>", start)
+        group = text[start:end]
+        for button in ("loop-toggle", "book-toggle", "dj-toggle", "curator-toggle"):
+            assert f'id="{button}"' in group
+
+    def test_shortcut_list_uses_colon_separators(self, client):
+        text = client.get("/").text
+        assert "<kbd>K</kbd>: pause or resume" in text
+        assert "<kbd>Shift+N</kbd>: next track" in text
