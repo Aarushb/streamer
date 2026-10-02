@@ -17,14 +17,10 @@
 
     <section aria-label="Playback controls">
         <h2>Controls</h2>
-        <form method="post" action="/previous" data-api="/api/tracks/previous" style="display:inline">
-            <button type="submit" id="previous-button">Previous</button>
-        </form>
-        <form method="post" action="{{ '/resume' if paused else '/pause' }}" id="pause-form" style="display:inline">
-            <button type="submit" id="pause-toggle">{% if paused %}Resume Stream{% else %}Pause Stream{% endif %}</button>
-        </form>
-        <form method="post" action="/next" data-api="/api/tracks/next" style="display:inline">
-            <button type="submit" id="next-button">Next</button>
+        <form method="post" id="transport-form">
+            <button type="submit" id="previous-button" formaction="/previous">Previous</button>
+            <button type="submit" id="pause-toggle" formaction="{{ '/resume' if paused else '/pause' }}">{% if paused %}Resume Stream{% else %}Pause Stream{% endif %}</button>
+            <button type="submit" id="next-button" formaction="/next">Next</button>
         </form>
         <button type="button" id="shortcuts-open" aria-haspopup="dialog">Keyboard shortcuts (?)</button>
         <p id="pause-status">Playback is <strong id="pause-state">{{ "paused" if paused else "running" }}</strong>.</p>
@@ -82,21 +78,15 @@
 
     <section aria-label="Options">
         <h2>Options</h2>
-        <form method="post" action="/loop/toggle" id="loop-form">
-            Loop current track is <strong id="loop-status">{{ "on" if loop_current else "off" }}</strong>.
-            <button type="submit" id="loop-toggle">Turn {{ "off" if loop_current else "on" }}</button>
-        </form>
-        <form method="post" action="/book/toggle" id="book-form">
-            Book reading mode (play the folder in order, no shuffle) is <strong id="book-status">{{ "on" if book_mode else "off" }}</strong>.
-            <button type="submit" id="book-toggle">Turn {{ "off" if book_mode else "on" }}</button>
-        </form>
-        <form method="post" action="/dj/toggle" id="dj-form">
-            AI DJ is <strong id="dj-status">{{ "on" if dj_enabled else "off" }}</strong>.
-            <button type="submit" id="dj-toggle">Turn {{ "off" if dj_enabled else "on" }}</button>
-        </form>
-        <form method="post" action="/curator/toggle" id="curator-form">
-            AI Curator is <strong id="curator-status">{{ "on" if curator_enabled else "off" }}</strong>.
-            <button type="submit" id="curator-toggle">Turn {{ "off" if curator_enabled else "on" }}</button>
+        <form method="post" id="options-form">
+            <p>Loop current track is <strong id="loop-status">{{ "on" if loop_current else "off" }}</strong>.
+                <button type="submit" id="loop-toggle" formaction="/loop/toggle">Turn {{ "off" if loop_current else "on" }}</button></p>
+            <p>Book reading mode (play the folder in order, no shuffle) is <strong id="book-status">{{ "on" if book_mode else "off" }}</strong>.
+                <button type="submit" id="book-toggle" formaction="/book/toggle">Turn {{ "off" if book_mode else "on" }}</button></p>
+            <p>AI DJ is <strong id="dj-status">{{ "on" if dj_enabled else "off" }}</strong>.
+                <button type="submit" id="dj-toggle" formaction="/dj/toggle">Turn {{ "off" if dj_enabled else "on" }}</button></p>
+            <p>AI Curator is <strong id="curator-status">{{ "on" if curator_enabled else "off" }}</strong>.
+                <button type="submit" id="curator-toggle" formaction="/curator/toggle">Turn {{ "off" if curator_enabled else "on" }}</button></p>
         </form>
         <p id="curator-check-info" hidden>Tracks until next check: <strong id="curator-tracks-remaining">-</strong></p>
         <button type="button" id="curator-force" hidden>Force Check</button>
@@ -138,15 +128,15 @@
     <h2 id="shortcuts-title">Keyboard shortcuts</h2>
     <p>Shortcuts are ignored while typing in a text field.</p>
     <ul>
-        <li><kbd>K</kbd> &mdash; pause or resume</li>
-        <li><kbd>Shift+N</kbd> &mdash; next track</li>
-        <li><kbd>Shift+P</kbd> &mdash; previous track</li>
-        <li><kbd>J</kbd> &mdash; seek back by the seek amount</li>
-        <li><kbd>L</kbd> &mdash; seek forward by the seek amount</li>
-        <li><kbd>1</kbd>&ndash;<kbd>7</kbd> &mdash; seek amount: 15s, 30s, 1m, 5m, 10m, 30m, 1h</li>
-        <li><kbd>R</kbd> &mdash; toggle loop current track</li>
-        <li><kbd>?</kbd> &mdash; open this dialog</li>
-        <li><kbd>Esc</kbd> &mdash; close this dialog</li>
+        <li><kbd>K</kbd>: pause or resume</li>
+        <li><kbd>Shift+N</kbd>: next track</li>
+        <li><kbd>Shift+P</kbd>: previous track</li>
+        <li><kbd>J</kbd>: seek back by the seek amount</li>
+        <li><kbd>L</kbd>: seek forward by the seek amount</li>
+        <li><kbd>1</kbd> to <kbd>7</kbd>: set the seek amount to 15s, 30s, 1m, 5m, 10m, 30m, or 1h</li>
+        <li><kbd>R</kbd>: toggle loop current track</li>
+        <li><kbd>?</kbd>: open this dialog</li>
+        <li><kbd>Esc</kbd>: close this dialog</li>
     </ul>
     <form method="dialog">
         <button type="submit">Close</button>
@@ -304,7 +294,7 @@
         document.getElementById("book-status").textContent = s.book_mode ? "on" : "off";
         document.getElementById("book-toggle").textContent = s.book_mode ? "Turn off" : "Turn on";
         document.getElementById("pause-state").textContent = s.paused ? "paused" : "running";
-        document.getElementById("pause-form").action = s.paused ? "/resume" : "/pause";
+        document.getElementById("pause-toggle").formAction = s.paused ? "/resume" : "/pause";
         document.getElementById("pause-toggle").textContent = s.paused ? "Resume Stream" : "Pause Stream";
         document.getElementById("curator-status").textContent = s.curator_enabled ? "on" : "off";
         document.getElementById("curator-toggle").textContent = s.curator_enabled ? "Turn off" : "Turn on";
@@ -343,28 +333,30 @@
     // Forms still work without JavaScript; with it they call the JSON API instead of reloading.
     document.addEventListener("submit", function(e) {
         var form = e.target;
-        var apiUrl = form.getAttribute("data-api");
-        if (apiUrl) {
+        var button = e.submitter ? e.submitter.id : "";
+        if (form.id === "transport-form") {
             e.preventDefault();
-            act("POST", apiUrl, undefined, "Nothing to do.");
-        } else if (form.id === "pause-form") {
+            if (button === "pause-toggle") {
+                togglePause();
+            } else if (button === "next-button") {
+                act("POST", "/api/tracks/next", undefined, "Nothing to do.");
+            } else if (button === "previous-button") {
+                act("POST", "/api/tracks/previous", undefined, "No previous track.");
+            }
+        } else if (form.id === "options-form") {
             e.preventDefault();
-            togglePause();
-        } else if (form.id === "loop-form") {
-            e.preventDefault();
-            toggleLoop();
-        } else if (form.id === "dj-form") {
-            e.preventDefault();
-            var djOn = document.getElementById("dj-status").textContent === "on";
-            act("POST", "/api/dj", {enabled: !djOn});
-        } else if (form.id === "book-form") {
-            e.preventDefault();
-            var bookOn = document.getElementById("book-status").textContent === "on";
-            act("POST", "/api/book-mode", {enabled: !bookOn});
-        } else if (form.id === "curator-form") {
-            e.preventDefault();
-            var curatorOn = document.getElementById("curator-status").textContent === "on";
-            act("POST", "/api/curator", {enabled: !curatorOn});
+            if (button === "loop-toggle") {
+                toggleLoop();
+            } else if (button === "book-toggle") {
+                var bookOn = document.getElementById("book-status").textContent === "on";
+                act("POST", "/api/book-mode", {enabled: !bookOn});
+            } else if (button === "dj-toggle") {
+                var djOn = document.getElementById("dj-status").textContent === "on";
+                act("POST", "/api/dj", {enabled: !djOn});
+            } else if (button === "curator-toggle") {
+                var curatorOn = document.getElementById("curator-status").textContent === "on";
+                act("POST", "/api/curator", {enabled: !curatorOn});
+            }
         } else if (form.hasAttribute("data-queue-index")) {
             e.preventDefault();
             act("DELETE", "/api/queue/" + form.getAttribute("data-queue-index"), undefined, "Track is no longer queued.");
